@@ -32,12 +32,17 @@ A `401` means the token is missing or wrong. A `403` means the request was addre
 
 If you deploy through a UI such as Portainer or Unraid, point it at this Git repository, or put `seccomp_profile.json` next to the compose file: Compose reads it from there.
 
-It listens on `127.0.0.1:3002`. To reach it from other machines, add two lines to `.env`, the address to listen on (such as this host's Tailscale IP) and the name clients will use, then run `docker compose up -d` again:
+It listens on `127.0.0.1:3002` only.
 
+To use it from your other devices over [Tailscale](https://tailscale.com), keep it on loopback and let Tailscale forward the port. Only your tailnet can reach it, and it keeps working after a reboot whichever of Docker and Tailscale starts first:
+
+```bash
+tailscale serve --bg --tcp 3002 tcp://127.0.0.1:3002
+echo "FIRECRAWL_HOSTNAME=myserver" >> .env   # this machine's Tailscale name
+docker compose up -d
 ```
-FIRECRAWL_BIND_ADDRESS=100.101.102.103
-FIRECRAWL_HOSTNAME=myserver
-```
+
+On other networks, set `FIRECRAWL_BIND_ADDRESS` in `.env` to the address to listen on, and `FIRECRAWL_HOSTNAME` to the name clients use. Docker can't bind an address that doesn't exist yet when it starts, so after a reboot this needs the interface to come up before Docker.
 
 ## Connect Claude Code or Codex
 
@@ -47,6 +52,8 @@ On the agent's machine (Node.js 22 or newer), with the token from `.env`:
 claude mcp add firecrawl-local -e FIRECRAWL_API_URL=http://myserver:3002 -e FIRECRAWL_API_KEY=<token> -- npx -y firecrawl-mcp
 codex mcp add firecrawl-local --env FIRECRAWL_API_URL=http://myserver:3002 --env FIRECRAWL_API_KEY=<token> -- npx -y firecrawl-mcp
 ```
+
+Let the agent's own web search find URLs, and Firecrawl Local fetch them. With `FIRECRAWL_CLOUD=off`, the default, pages are fetched from your machine and nothing is sent to Firecrawl.
 
 Firecrawl SDKs take the same two values, for example `Firecrawl(api_url="http://myserver:3002", api_key="<token>")` in Python.
 
@@ -71,7 +78,7 @@ Set these in `.env`:
 | Variable | Default | |
 | --- | --- | --- |
 | `FIRECRAWL_LOCAL_TOKEN` | required | Bearer token for every request, including `/health`. |
-| `FIRECRAWL_BIND_ADDRESS` | `127.0.0.1` | Host address the port is published on. |
+| `FIRECRAWL_BIND_ADDRESS` | `127.0.0.1` | Host address the port is published on. Not needed with `tailscale serve`. |
 | `FIRECRAWL_HOSTNAME` | `localhost` | Name clients use to reach the server. Requests addressed to any other name are refused. |
 | `FIRECRAWL_CLOUD` | `off` | `search` sends search to Firecrawl Cloud; `auto` also sends Alexandria and pages that block you. |
 | `FIRECRAWL_API_KEY` | | Firecrawl key for those cloud features. |
@@ -80,7 +87,7 @@ Other [Firecrawl Local settings](https://docs.firecrawl.dev/quickstarts/firecraw
 
 ## Security
 
-- Keep the token private and bind to loopback or a trusted VPN interface such as Tailscale.
+- Keep the token private, and never publish the port to the internet. Reach it through `tailscale serve` or another private network.
 - Compose uses [a seccomp profile](seccomp_profile.json) based on Playwright's. It lets Chromium create its sandbox's user namespace and `chroot` inside it. With every Docker capability dropped, nothing can `chroot` in the container itself; the smoke tests check this.
 - `serve` refuses localhost and private-network targets unless `FIRECRAWL_LOCAL_ALLOW_PRIVATE` is set (only do that if every caller is trusted), and always refuses link-local and cloud-metadata addresses, including after redirects.
 - The compose file runs the container read-only, as a non-root user, with no capabilities and `no-new-privileges`.

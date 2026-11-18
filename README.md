@@ -16,7 +16,7 @@ Scrape pages and documents, map links, and crawl sites through the Firecrawl v2 
 
 ```bash
 git clone https://github.com/jordanstrobing/firecrawl-local-docker && cd firecrawl-local-docker
-echo "FIRECRAWL_LOCAL_TOKEN=$(openssl rand -hex 32)" > .env
+(umask 077; echo "FIRECRAWL_LOCAL_TOKEN=$(openssl rand -hex 32)" > .env)
 docker compose up -d
 ```
 

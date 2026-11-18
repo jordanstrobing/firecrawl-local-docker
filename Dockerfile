@@ -56,7 +56,6 @@ COPY LICENSE /usr/share/doc/firecrawl-local/packaging-LICENSE
 LABEL org.opencontainers.image.title="Firecrawl Local (unofficial image)" \
       org.opencontainers.image.description="Firecrawl Local with Chromium. Not affiliated with Firecrawl." \
       org.opencontainers.image.source="https://github.com/jordanstrobing/firecrawl-local-docker" \
-      org.opencontainers.image.licenses="AGPL-3.0-only AND MIT" \
       org.opencontainers.image.version="${FIRECRAWL_LOCAL_VERSION}" \
       io.github.jordanstrobing.firecrawl-local-docker.chromium="${CHROMIUM_VERSION}"
 

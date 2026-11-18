@@ -100,6 +100,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      # Lets the update check below run the arm64 image too.
+      - name: Set up QEMU
+        if: github.event_name == 'schedule'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+
       - name: Decide whether to build
         id: decide
         env:
@@ -120,10 +127,12 @@ jobs:
                   and .["io.github.jordanstrobing.firecrawl-local-docker.chromium"] == $chromium;
               versions_match("amd64"; $amd64) and versions_match("arm64"; $arm64)
             ' <<< "$configs" >/dev/null; then
-              # Same versions: rebuild only for Debian updates to other packages.
-              updates=$(docker run --rm --pull always --user 0 --entrypoint sh "$IMAGE:latest" -c \
-                  'apt-get update -qq >/dev/null && apt list --upgradable 2>/dev/null' \
-                | awk -F/ 'NR > 1 { print $1 }' | paste -sd ' ' -)
+              # Same versions: rebuild only for Debian updates to other packages,
+              # on either architecture.
+              updates=$(for platform in linux/amd64 linux/arm64; do
+                  docker run --rm --pull always --platform "$platform" --user 0 --entrypoint sh "$IMAGE:latest" -c \
+                    'apt-get update -qq >/dev/null && apt list --upgradable 2>/dev/null'
+                done | awk -F/ '/\// { print $1 }' | sort -u | paste -sd ' ' -)
               if [[ -z "$updates" ]]; then build=false; fi
               echo "Debian updates: ${updates:-none}" >> "$GITHUB_STEP_SUMMARY"
             fi

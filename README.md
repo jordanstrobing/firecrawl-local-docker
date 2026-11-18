@@ -2,15 +2,17 @@
 
 [![build](https://github.com/jordanstrobing/firecrawl-local-docker/actions/workflows/build.yml/badge.svg)](https://github.com/jordanstrobing/firecrawl-local-docker/actions/workflows/build.yml)
 
-[Firecrawl Local](https://docs.firecrawl.dev/quickstarts/firecrawl-local) with a headless Chromium, as a container image for `linux/amd64` and `linux/arm64`, rebuilt automatically when either one updates.
+[Firecrawl Local](https://docs.firecrawl.dev/quickstarts/firecrawl-local) with Debian Chromium Headless Shell for `linux/amd64` and `linux/arm64`.
 
 ```
 ghcr.io/jordanstrobing/firecrawl-local-docker:latest
 ```
 
-> **Unofficial.** Not affiliated with or supported by Firecrawl. Report image problems here, and Firecrawl Local problems [upstream](https://github.com/firecrawl/firecrawl/issues).
+> **Unofficial image.** Report packaging problems here and Firecrawl Local bugs [upstream](https://github.com/firecrawl/firecrawl/issues).
 
-Firecrawl Local is one Rust binary that scrapes, crawls and maps websites and serves the Firecrawl v2 API, so Firecrawl's SDKs and MCP server work against it unchanged. Firecrawl publishes it on crates.io, not as an image. This image adds Chromium so JavaScript pages render, and runs it with the browser sandbox on.
+Scrape pages and documents, map links, and crawl a site through the Firecrawl
+v2 API. Ordinary scrapes use HTTP. JavaScript rendering and screenshots use
+Chromium with its sandbox enabled.
 
 ## Run it
 
@@ -22,7 +24,7 @@ curl -fsSLO https://raw.githubusercontent.com/jordanstrobing/firecrawl-local-doc
   set -C
   printf 'FIRECRAWL_LOCAL_TOKEN=%s\n' "$(openssl rand -hex 32)" > .env
 )
-docker compose up -d
+docker compose up -d --wait
 
 source .env
 curl -fsS http://127.0.0.1:3002/v2/scrape \
@@ -39,12 +41,13 @@ then run `docker compose up -d` again.
 ## Connect Codex or Claude Code
 
 Run these commands on the machine running the agent with Node.js 22 or newer.
-Use your server's tailnet URL when it runs on a different machine. Copy the bearer token from
-the server's `.env` into the hidden prompt.
+Use the server's tailnet URL when it runs on a different machine. Paste the
+bearer token from the server's `.env` into the hidden prompt.
 
 ```bash
 FIRECRAWL_URL=http://127.0.0.1:3002
-read -rsp 'Firecrawl token: ' FIRECRAWL_LOCAL_TOKEN
+printf 'Firecrawl token: ' >&2
+read -rs FIRECRAWL_LOCAL_TOKEN
 printf '\n'
 ```
 
@@ -66,9 +69,9 @@ claude mcp add --scope user firecrawl-local \
   -- npx -y firecrawl-mcp
 ```
 
-Use your normal web search to discover sources. Ask for `firecrawl-local` when
-you need to read a PDF, render a JavaScript page, or crawl a bounded section of
-a site. This works alongside other tools in either agent.
+Use your normal web search to discover sources. Ask for `firecrawl-local` to
+read documents, scrape selected URLs, or crawl a section of a site. Start
+with a small page limit and narrow the path for documentation crawls.
 
 Any Firecrawl SDK takes the same two values:
 
@@ -81,9 +84,9 @@ print(app.scrape("https://example.com").markdown)
 
 ## What runs where
 
-| | Where | Limits |
+| Feature | Runs on | Notes |
 | --- | --- | --- |
-| Scrape, crawl, map, batch scrape | Container | None from Firecrawl |
+| Scrape, crawl, map, batch scrape | Container | Local requests use no Firecrawl credits |
 | JavaScript pages, screenshots | Container (Chromium) | |
 | PDFs, Office documents | Container | |
 | Search | Firecrawl Cloud | Enable with `FIRECRAWL_CLOUD=search` or `auto` |
@@ -95,14 +98,14 @@ Requests sent on to Firecrawl Cloud use the container's own `FIRECRAWL_API_KEY`,
 
 ## Configuration
 
-| Variable | Default | |
+| Variable | Default | Effect |
 | --- | --- | --- |
 | `FIRECRAWL_BIND_ADDRESS` | `127.0.0.1` | Host address where Compose publishes port 3002. |
 | `FIRECRAWL_LOCAL_TOKEN` | required | Bearer token for every request, including `/health`. |
 | `FIRECRAWL_LOCAL_ALLOWED_HOSTS` | | Comma-separated host names clients may address, for example `myserver,192.168.1.10`. `localhost` and `127.0.0.1` always work. Added by this image: Firecrawl Local only takes `--allowed-host` flags. |
 | `FIRECRAWL_API_KEY` | | Firecrawl key for search, Alexandria and the blocked-page fallback. |
 | `FIRECRAWL_CLOUD` | `off` in Compose | `search` enables hosted search. `auto` also enables the blocked-page fallback and Alexandria. |
-| `FIRECRAWL_LOCAL_BROWSER` | `auto` | `never` or `always` use Chromium. |
+| `FIRECRAWL_LOCAL_BROWSER` | `auto` | Launch Chromium when needed. Use `never` for HTTP-only or `always` to render every scrape. |
 | `FIRECRAWL_LOCAL_SCROLL` | off | `1` scrolls pages before reading them, for lazy-loaded content. Firecrawl Local treats any value, even `0`, as on; this image treats empty, `0`, `false`, `no` and `off` as off. |
 | `FIRECRAWL_LOCAL_ALLOW_PRIVATE` | off | Lets callers scrape localhost and private addresses. Leave off unless every caller is trusted. |
 
@@ -124,7 +127,7 @@ seccomp profile if the scrape uses Chromium.
 
 ## Tags and updates
 
-| Tag | |
+| Tag | Meaning |
 | --- | --- |
 | `latest` | Newest build. |
 | `<version>`, such as `0.1.1` | Newest build of that Firecrawl Local version. |
@@ -134,8 +137,7 @@ The [daily workflow](.github/workflows/build.yml) checks for new Firecrawl
 Local and Chromium versions. Each architecture uses matching versions of
 `chromium-headless-shell` and `chromium-common` from Debian. Check the
 [Debian security tracker](https://security-tracker.debian.org/tracker/source-package/chromium)
-for patch status. Monday builds also refresh
-other Debian packages. Native runners test the actual Compose service, and
+for patch status. Monday builds also refresh other Debian packages. Native runners test the actual Compose service, and
 the release verifies the tested image config digests before updating the
 floating tags.
 
@@ -160,7 +162,7 @@ Pass `--build-arg FIRECRAWL_LOCAL_VERSION=0.1.0` or `--build-arg CHROMIUM_VERSIO
 
 ## Licenses
 
-This repository is [MIT](LICENSE). The image also contains:
+The packaging code uses the [MIT License](LICENSE). The image also contains:
 
 - **Firecrawl Local, [AGPL-3.0](licenses/AGPL-3.0.txt).** The exact source each image was built from (the crate, including `Cargo.lock`) and the license of every Rust dependency are inside it at `/usr/share/doc/firecrawl-local/`.
 - **Chromium and Debian packages**, under their own licenses at `/usr/share/doc/<package>/copyright`.

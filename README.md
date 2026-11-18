@@ -12,9 +12,9 @@ ghcr.io/jordanstrobing/firecrawl-local-docker:latest
 
 ## Why
 
-We love Firecrawl. Turning messy web pages into clean markdown is the hard part of giving an agent the web, and Firecrawl does it better than anything else we've used. When Firecrawl open-sourced Firecrawl Local, with the same page-cleaning code their cloud runs, it became possible to do that on a laptop or a Raspberry Pi. This project makes it one `docker compose up`.
+Firecrawl Local uses the same page-cleaning code as Firecrawl's cloud service, so agents get clean markdown instead of raw HTML. Firecrawl publishes it as a Rust crate; this project adds Chromium, a locked-down Compose setup and automatic updates, so it runs with one `docker compose up`. Thanks to the Firecrawl team for open-sourcing it.
 
-It's unofficial: built by fans, not by Firecrawl. Report problems with the image here, and problems with Firecrawl Local [upstream](https://github.com/firecrawl/firecrawl/issues).
+This image is unofficial and not affiliated with Firecrawl. Report problems with the image here, and problems with Firecrawl Local [upstream](https://github.com/firecrawl/firecrawl/issues).
 
 ## How it works
 
@@ -60,14 +60,12 @@ codex mcp add firecrawl-local --env FIRECRAWL_API_URL=http://127.0.0.1:3002 --en
 
 Firecrawl's SDKs take the same two values, for example `Firecrawl(api_url="http://127.0.0.1:3002", api_key="<token>")` in Python.
 
-**4. Tell your agent when to use it**
+**4. Teach your agent when to use it**
 
-Agents tend to stick with their built-in fetch tool, which can't render JavaScript and often summarizes pages. Add this to your `CLAUDE.md` (Claude Code) or `AGENTS.md` (Codex):
+Agents tend to stick with their built-in fetch tool, which can't render JavaScript and often summarizes pages. This repository includes a [skill](skills/firecrawl-local/SKILL.md) in the open [Agent Skills](https://agentskills.io) format that tells them when to use Firecrawl and how to keep its output small. Install it for Claude Code, Codex or any other supported agent:
 
-```markdown
-To read web pages, use the firecrawl-local tools: firecrawl_scrape for a page,
-firecrawl_map to find the right page on a site first. Use curl for APIs and raw files.
-X posts need a login, so read https://publish.twitter.com/oembed?url=<post URL> instead.
+```bash
+npx skills add jordanstrobing/firecrawl-local-docker -g
 ```
 
 In Claude Code, you can also skip the approval prompt for these tools by adding `mcp__firecrawl-local__firecrawl_scrape`, `mcp__firecrawl-local__firecrawl_map`, `mcp__firecrawl-local__firecrawl_crawl` and `mcp__firecrawl-local__firecrawl_check_crawl_status` to `permissions.allow` in your settings.

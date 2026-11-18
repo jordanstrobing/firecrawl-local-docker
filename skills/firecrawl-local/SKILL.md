@@ -1,0 +1,28 @@
+---
+name: firecrawl-local
+description: Read web pages, PDFs and documentation sites through a self-hosted Firecrawl Local server (the firecrawl-local MCP tools). Use it whenever a task needs the content of a URL, to find the right page on a site, or to collect a section of docs.
+---
+
+# Reading the web with Firecrawl Local
+
+The `firecrawl-local` MCP server fetches pages on the user's own machine and returns clean markdown of the main content. Nothing is sent to a third party, and there are no credits or rate limits.
+
+## Which tool
+
+- **A known URL:** `firecrawl_scrape` with `formats: ["markdown"]`. It handles JavaScript-heavy pages and PDFs, which a plain fetch tool can't.
+- **A site, but not the page:** `firecrawl_map` lists the site's URLs. Pick the one page you need and scrape only that, instead of scraping several pages to find it.
+- **A section of a site:** `firecrawl_crawl` with a small `limit` (5 to 10) and `includePaths` for the section, then `firecrawl_check_crawl_status` until it completes.
+- **APIs, JSON endpoints and raw files** (for example `raw.githubusercontent.com`): use `curl` or a plain fetch. Firecrawl is for web pages.
+- **Finding pages:** use your own web search, then read the results with Firecrawl.
+
+## Keep output small
+
+- Scrapes return only the main content by default. To narrow further, pass `includeTags` (such as `["article"]` or `["main"]`) or `excludeTags`.
+- For a slow page that renders late, add `waitFor` in milliseconds.
+- Search, AI extraction (`json`, `summary`) and browser actions are not available locally and return an error. Don't retry them.
+
+## Errors
+
+- `401 UNAUTHORIZED`: the MCP server's `FIRECRAWL_API_KEY` doesn't match the server's token.
+- `403 HOST_NOT_ALLOWED`: `FIRECRAWL_API_URL` uses a host name the server wasn't configured to accept.
+- A page that comes back as a login wall or "blocked" can't be read from this network. Say so rather than retrying.

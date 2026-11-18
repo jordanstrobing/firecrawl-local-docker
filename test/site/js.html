@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>JavaScript test page</title></head>
+<body>
+  <main id="app"><p>Loading</p></main>
+  <script>
+    // The marker exists only after this script runs, so finding it in the
+    // scrape proves Chromium rendered the page.
+    document.getElementById("app").innerHTML =
+      "<h1>Rendered by JavaScript</h1><p>js-marker-" + ["c9", "1e"].join("") + "</p>";
+  </script>
+</body>
+</html>

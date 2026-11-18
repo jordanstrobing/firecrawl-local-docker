@@ -1,129 +1,289 @@
 name: build
 
-# Daily: rebuild when crates.io has a new firecrawl-local version
-#        or Debian has a new Chromium (security fixes land there first).
-# Weekly: rebuild anyway so the rest of the Debian packages stay patched.
+# Check Firecrawl Local and Chromium daily. Rebuild on Mondays for other Debian updates.
+# Pull requests and manual runs outside main build and test without publishing.
 on:
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
-    inputs:
-      force:
-        description: "Rebuild even if nothing changed"
-        type: boolean
-        default: false
   push:
     branches: [main]
-    paths: ["Dockerfile", ".github/workflows/build.yml"]
+    paths: &build-inputs
+      - Dockerfile
+      - compose.yaml
+      - .dockerignore
+      - LICENSE
+      - rootfs/**
+      - licenses/**
+      - seccomp_profile.json
+      - test/**
+      - .github/workflows/build.yml
+  pull_request:
+    paths: *build-inputs
 
-permissions:
-  contents: read
-  packages: write
+permissions: {}
 
 concurrency:
-  group: build
-  cancel-in-progress: false
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      packages: read
+    outputs:
+      firecrawl: ${{ steps.versions.outputs.firecrawl }}
+      chromium_amd64: ${{ steps.versions.outputs.chromium_amd64 }}
+      chromium_arm64: ${{ steps.versions.outputs.chromium_arm64 }}
+      created: ${{ steps.versions.outputs.created }}
+      stamp: ${{ steps.versions.outputs.stamp }}
+      build: ${{ steps.decide.outputs.build }}
+      publish: ${{ steps.decide.outputs.publish }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Decide whether to build
-        id: plan
-        env:
-          FORCE: ${{ inputs.force || 'false' }}
-          EVENT: ${{ github.event_name }}
+      - name: Find the latest versions
+        id: versions
         run: |
           set -euo pipefail
-          image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          firecrawl=$(curl -fsS -A "firecrawl-local-docker (GitHub Actions)" \
-            https://crates.io/api/v1/crates/firecrawl-local | jq -r .crate.max_version)
-          chromium=$(docker run --rm debian:trixie-slim sh -c \
-            'apt-get update -qq >/dev/null && apt-cache policy chromium' | awk '/Candidate/{print $2}')
-          [ -n "$firecrawl" ] && [ -n "$chromium" ] || { echo "Could not read versions"; exit 1; }
 
-          current_fc=none; current_cr=none
-          if docker pull -q "$image:latest" >/dev/null 2>&1; then
-            current_fc=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image:latest")
-            current_cr=$(docker inspect -f '{{index .Config.Labels "dev.firecrawl-local.chromium-version"}}' "$image:latest")
-          fi
-          echo "Firecrawl Local: published $current_fc, available $firecrawl"
-          echo "Chromium:        published $current_cr, available $chromium"
+          firecrawl=$(curl -fsS --retry 3 -A "firecrawl-local-docker (+https://github.com/${GITHUB_REPOSITORY})" \
+            https://crates.io/api/v1/crates/firecrawl-local | jq -er '.crate.max_stable_version | select(test("^[0-9]+[.][0-9]+[.][0-9]+$"))')
 
-          build=false
-          if [ "$current_fc" != "$firecrawl" ]; then echo "→ new Firecrawl Local"; build=true; fi
-          if [ "$current_cr" != "$chromium" ]; then echo "→ new Chromium"; build=true; fi
-          if [ "$FORCE" = "true" ] || [ "$EVENT" = "push" ]; then echo "→ forced"; build=true; fi
-          if [ "$EVENT" = "schedule" ] && [ "$(date -u +%u)" = "1" ]; then echo "→ weekly refresh"; build=true; fi
+          # Match chromium-common and chromium-headless-shell on each architecture.
+          # Security releases can arrive at different times on the two architectures.
+          latest_chromium() {
+            local arch=$1 versions version latest=
+            versions=$(
+              for src in debian/dists/trixie/main debian/dists/trixie-updates/main \
+                         debian-security/dists/trixie-security/main; do
+                curl -fsSL --retry 3 "https://deb.debian.org/$src/binary-$arch/Packages.xz" | xz -dc || exit 1
+              done | awk '
+                /^Package: / { package = $2 }
+                /^Version: / && package == "chromium-headless-shell" { shell[$2] = 1 }
+                /^Version: / && package == "chromium-common" { common[$2] = 1 }
+                END { for (version in shell) if (version in common) print version }
+              '
+            ) || return 1
+            while IFS= read -r version; do
+              if [[ -n "$version" ]] && dpkg --compare-versions "$version" gt "$latest"; then
+                latest=$version
+              fi
+            done <<< "$versions"
+            if [[ -z "$latest" ]]; then
+              echo "::error::No matching Chromium packages found for $arch" >&2
+              return 1
+            fi
+            printf '%s\n' "$latest"
+          }
 
+          amd64=$(latest_chromium amd64)
+          arm64=$(latest_chromium arm64)
           {
-            echo "image=$image"
             echo "firecrawl=$firecrawl"
-            echo "chromium=$chromium"
-            echo "build=$build"
+            echo "chromium_amd64=$amd64"
+            echo "chromium_arm64=$arm64"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "stamp=$(date -u +%Y%m%d)-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           } >> "$GITHUB_OUTPUT"
-          echo "### Firecrawl Local $firecrawl · Chromium $chromium · build=$build" >> "$GITHUB_STEP_SUMMARY"
+          echo "Firecrawl Local $firecrawl · Chromium amd64 $amd64, arm64 $arm64"
 
-      - uses: docker/setup-buildx-action@v3
-        if: steps.plan.outputs.build == 'true'
-
-      - uses: docker/login-action@v3
-        if: steps.plan.outputs.build == 'true'
+      - name: Log in to ghcr.io
+        if: github.ref == 'refs/heads/main' && github.event_name == 'schedule'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      # The Rust compile is cached; the runtime stage is always rebuilt so
-      # apt upgrades are never served from cache.
-      - uses: docker/build-push-action@v6
-        if: steps.plan.outputs.build == 'true'
+      - name: Decide whether to build
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          FIRECRAWL: ${{ steps.versions.outputs.firecrawl }}
+          CHROMIUM_AMD64: ${{ steps.versions.outputs.chromium_amd64 }}
+          CHROMIUM_ARM64: ${{ steps.versions.outputs.chromium_arm64 }}
+        run: |
+          set -euo pipefail
+          build=true
+          publish=false
+          if [[ "$EVENT" == schedule && "$(date -u +%u)" != 1 ]]; then
+            configs=$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{json .Image}}' || printf '{}')
+            if jq -e --arg firecrawl "$FIRECRAWL" --arg amd64 "$CHROMIUM_AMD64" --arg arm64 "$CHROMIUM_ARM64" '
+              def versions_match($arch; $chromium):
+                .["linux/" + $arch].config.Labels
+                | .["org.opencontainers.image.version"] == $firecrawl
+                  and .["io.github.jordanstrobing.firecrawl-local-docker.chromium"] == $chromium;
+              versions_match("amd64"; $amd64) and versions_match("arm64"; $arm64)
+            ' <<< "$configs" >/dev/null; then
+              build=false
+            fi
+          fi
+          if [[ "$build" == true && "$EVENT" != pull_request && "$GITHUB_REF" == refs/heads/main ]]; then
+            publish=true
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "Build: $build · Publish: $publish" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.build == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to ghcr.io
+        if: needs.plan.outputs.publish == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # The Rust compile is cached between runs. The runtime stage is always
+      # rebuilt so Debian updates are never served from cache.
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          platforms: linux/arm64
+          platforms: linux/${{ matrix.arch }}
           pull: true
           load: true
           no-cache-filters: runtime
+          provenance: false
+          sbom: false
           build-args: |
-            FIRECRAWL_LOCAL_VERSION=${{ steps.plan.outputs.firecrawl }}
-            CHROMIUM_VERSION=${{ steps.plan.outputs.chromium }}
+            FIRECRAWL_LOCAL_VERSION=${{ needs.plan.outputs.firecrawl }}
+            CHROMIUM_VERSION=${{ needs.plan.outputs[format('chromium_{0}', matrix.arch)] }}
+          labels: |
+            org.opencontainers.image.created=${{ needs.plan.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
           tags: firecrawl-local:candidate
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
 
-      # Only a candidate that scrapes both a static and a JavaScript page is pushed.
       - name: Smoke test
-        if: steps.plan.outputs.build == 'true'
-        run: |
-          set -euo pipefail
-          curl -fsSLO https://raw.githubusercontent.com/microsoft/playwright/main/utils/docker/seccomp_profile.json
-          docker run --rm firecrawl-local:candidate --version
-          docker run --rm --entrypoint chromium firecrawl-local:candidate --version
-          docker run -d --name fc -p 3002:3002 --shm-size 1g \
-            --security-opt seccomp=seccomp_profile.json \
-            -e FIRECRAWL_LOCAL_TOKEN=ci-test -e FIRECRAWL_CLOUD=off firecrawl-local:candidate
-          for i in $(seq 1 30); do curl -fsS localhost:3002/health && break; sleep 1; done
-          scrape() {
-            curl -fsS localhost:3002/v2/scrape -H 'authorization: Bearer ci-test' \
-              -H 'content-type: application/json' -d "$1"
-          }
-          scrape '{"url":"https://example.com","formats":["markdown"]}' \
-            | jq -e '.data.markdown | test("Example Domain")'
-          # quotes.toscrape.com/js renders its content with JavaScript only
-          scrape '{"url":"https://quotes.toscrape.com/js/","formats":["markdown"]}' \
-            | tee /tmp/js.json | jq -e '.data.markdown | test("Einstein")' \
-            || { jq '.data.warning, .warning' /tmp/js.json; docker logs fc; exit 1; }
-          docker logs fc 2>&1 | tail -20
+        run: test/smoke.sh firecrawl-local:candidate
 
-      - name: Push
-        if: steps.plan.outputs.build == 'true'
+      # Reuse the tested build's cache and attach the SBOM. Verify the image
+      # config digest before handing the architecture digest to the release job.
+      - name: Push by digest
+        id: push
+        if: needs.plan.outputs.publish == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          provenance: false
+          sbom: true
+          build-args: |
+            FIRECRAWL_LOCAL_VERSION=${{ needs.plan.outputs.firecrawl }}
+            CHROMIUM_VERSION=${{ needs.plan.outputs[format('chromium_{0}', matrix.arch)] }}
+          labels: |
+            org.opencontainers.image.created=${{ needs.plan.outputs.created }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Verify the pushed image and save its digest
+        if: needs.plan.outputs.publish == 'true'
+        env:
+          ARCH: ${{ matrix.arch }}
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           set -euo pipefail
-          image="${{ steps.plan.outputs.image }}"
-          for tag in latest "${{ steps.plan.outputs.firecrawl }}"; do
-            docker tag firecrawl-local:candidate "$image:$tag"
-            docker push -q "$image:$tag"
-          done
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          platform_digest=$(docker buildx imagetools inspect --raw "$IMAGE@$DIGEST" \
+            | jq -er --arg arch "$ARCH" '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest')
+          pushed=$(docker buildx imagetools inspect --raw "$IMAGE@$platform_digest" | jq -er '.config.digest')
+          tested=$(docker image inspect firecrawl-local:candidate --format '{{.Id}}')
+          if [[ "$pushed" != "$tested" ]]; then
+            echo "::error::Pushed image config $pushed differs from tested image config $tested"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: needs.plan.outputs.publish == 'true'
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: [plan, build]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Tag the multi-arch image
+        id: tag
+        env:
+          FIRECRAWL: ${{ needs.plan.outputs.firecrawl }}
+          STAMP: ${{ needs.plan.outputs.stamp }}
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          set -euo pipefail
+          sources=()
+          for d in *; do sources+=("$IMAGE@sha256:$d"); done
+          [ ${#sources[@]} -eq 2 ] || { echo "::error::Expected 2 digests, got ${#sources[@]}"; exit 1; }
+          docker buildx imagetools create \
+            -t "$IMAGE:$FIRECRAWL-$STAMP" \
+            "${sources[@]}"
+          digest=$(docker buildx imagetools inspect "$IMAGE:$FIRECRAWL-$STAMP" --format '{{json .Manifest}}' | jq -er '.digest | select(test("^sha256:[0-9a-f]{64}$"))')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.tag.outputs.digest }}
+          push-to-registry: true
+
+      - name: Promote the attested image
+        env:
+          FIRECRAWL: ${{ needs.plan.outputs.firecrawl }}
+          DIGEST: ${{ steps.tag.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create -t "$IMAGE:$FIRECRAWL" -t "$IMAGE:latest" "$IMAGE@$DIGEST"
+          echo "Published $IMAGE:$FIRECRAWL and $IMAGE:latest ($DIGEST)" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,26 @@
+Third-party material in this repository and in the published image
+==================================================================
+
+seccomp_profile.json
+  From Playwright (https://github.com/microsoft/playwright), file
+  utils/docker/seccomp_profile.json at commit
+  ae935a43d9e376e4759548f6b3c6905c7b282333. This image adds chroot
+  to the allowlist for Chromium's namespace sandbox with Docker capabilities
+  dropped. The kernel still checks the capability in the calling namespace.
+  Copyright (c) Microsoft Corporation. Licensed under the Apache License 2.0;
+  see Apache-2.0.txt in this directory.
+
+Firecrawl Local (the firecrawl-local binary in the image)
+  https://github.com/firecrawl/firecrawl/tree/main/apps/local
+  Licensed under the GNU Affero General Public License v3.0; see
+  AGPL-3.0.txt. The image carries the exact source it was built from at
+  /usr/share/doc/firecrawl-local/firecrawl-local-<version>.crate, and the
+  license files of every Rust crate used to build it under
+  /usr/share/doc/firecrawl-local/third-party/.
+
+Debian packages (Chromium and the base system)
+  Each package's copyright and license are at /usr/share/doc/<package>/copyright
+  in the image. Source is available from https://sources.debian.org.
+
+"Firecrawl" is a trademark of its owner. This project is not affiliated with,
+endorsed by or supported by Firecrawl.

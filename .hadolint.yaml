@@ -1,0 +1,4 @@
+ignored:
+  # Debian packages are deliberately unpinned except Chromium, which CI pins:
+  # the point of the image is to pick up security updates on every rebuild.
+  - DL3008

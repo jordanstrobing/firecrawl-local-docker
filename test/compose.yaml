@@ -1,0 +1,25 @@
+services:
+  firecrawl-local:
+    image: ${SMOKE_IMAGE:?set SMOKE_IMAGE}
+    pull_policy: never
+    container_name: ${SMOKE_PROJECT:?set SMOKE_PROJECT}
+    ports: !override ["127.0.0.1::3002"]
+    environment:
+      FIRECRAWL_CLOUD: "off"
+      FIRECRAWL_LOCAL_ALLOW_PRIVATE: "true"
+  fixture:
+    image: python:3.13-alpine
+    command: [python, -m, http.server, "8000", --directory, /site]
+    volumes:
+      - type: bind
+        source: ./test/site
+        target: /site
+        read_only: true
+    networks:
+      default:
+        aliases: [fixture.test]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/static.html')"]
+      interval: 1s
+      timeout: 2s
+      retries: 10

@@ -17,7 +17,7 @@ services:
       - firecrawl-home:/home/firecrawl
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:size=512m,mode=1777
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
@@ -26,7 +26,13 @@ services:
     # hostile page from taking the host down.
     shm_size: 1gb
     mem_limit: 2g
+    memswap_limit: 2g
     pids_limit: 1024
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   firecrawl-home:

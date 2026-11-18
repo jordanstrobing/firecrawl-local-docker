@@ -36,8 +36,13 @@ ARG CHROMIUM_VERSION
 # through it, systemd (about 155 MB more) and uses twice the memory per page.
 # Only Chromium is pinned, so every rebuild picks up Debian's security fixes.
 # curl is for the health check; tini reaps Chromium's orphaned processes.
+# Skip Mesa's GPU driver, which pulls in LLVM and Z3, and Vulkan's debug
+# layer (about 200 MB together): libgbm only loads the driver when a GPU
+# device exists, which this container never has.
 # hadolint ignore=DL3008
-RUN apt-get update \
+RUN printf 'path-exclude=%s\n' '/usr/lib/*/libLLVM*' '/usr/lib/*/libgallium*' '/usr/lib/*/libz3.so*' \
+      /usr/lib/chromium/libVkLayer_khronos_validation.so > /etc/dpkg/dpkg.cfg.d/no-gpu \
+ && apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
       "chromium-headless-shell${CHROMIUM_VERSION:+=$CHROMIUM_VERSION}" \

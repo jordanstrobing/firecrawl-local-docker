@@ -1,15 +1,14 @@
 services:
   firecrawl-local:
     image: ghcr.io/jordanstrobing/firecrawl-local-docker:latest
-    container_name: firecrawl-local
     restart: unless-stopped
+    # FIRECRAWL_HOSTNAME is the name clients use to reach this server, such as
+    # its Tailscale name. Requests addressed to any other name are refused.
+    command: [serve, --host, 0.0.0.0, --allowed-host, "${FIRECRAWL_HOSTNAME:-localhost}"]
     ports:
       - "${FIRECRAWL_BIND_ADDRESS:-127.0.0.1}:3002:3002"
     environment:
       FIRECRAWL_LOCAL_TOKEN: ${FIRECRAWL_LOCAL_TOKEN:?set FIRECRAWL_LOCAL_TOKEN in .env}
-      # Names clients use to reach this server, comma-separated, for example
-      # "myserver,myserver.tailnet.ts.net,192.168.1.10". localhost always works.
-      FIRECRAWL_LOCAL_ALLOWED_HOSTS: ${FIRECRAWL_LOCAL_ALLOWED_HOSTS:-}
       FIRECRAWL_CLOUD: ${FIRECRAWL_CLOUD:-off}
       FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY:-}
     volumes:
@@ -22,8 +21,8 @@ services:
     security_opt:
       - no-new-privileges:true
       - seccomp=./seccomp_profile.json
-    # Chromium needs shared memory; the limits stop a runaway crawl or a
-    # hostile page from taking the host down.
+    # Chromium needs shared memory. The limits keep a runaway crawl or a
+    # hostile page from exhausting the host's memory or process table.
     shm_size: 1gb
     mem_limit: 2g
     memswap_limit: 2g

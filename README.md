@@ -10,77 +10,33 @@ ghcr.io/jordanstrobing/firecrawl-local-docker:latest
 
 > **Unofficial image.** Report packaging problems here and Firecrawl Local bugs [upstream](https://github.com/firecrawl/firecrawl/issues).
 
-Scrape pages and documents, map links, and crawl a site through the Firecrawl
-v2 API. Ordinary scrapes use HTTP. JavaScript rendering and screenshots use
-Chromium with its sandbox enabled.
+Scrape pages and documents, map links, and crawl sites through the Firecrawl v2 API. Ordinary pages are fetched over HTTP; JavaScript pages and screenshots use Chromium with its sandbox on.
 
 ## Run it
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/jordanstrobing/firecrawl-local-docker/main/compose.yaml
-curl -fsSLO https://raw.githubusercontent.com/jordanstrobing/firecrawl-local-docker/main/seccomp_profile.json
-(
-  umask 077
-  set -C
-  printf 'FIRECRAWL_LOCAL_TOKEN=%s\n' "$(openssl rand -hex 32)" > .env
-)
-docker compose up -d --wait
-
-source .env
-curl -fsS http://127.0.0.1:3002/v2/scrape \
-  -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"url":"https://example.com","formats":["markdown"]}'
+git clone https://github.com/jordanstrobing/firecrawl-local-docker && cd firecrawl-local-docker
+(umask 077; echo "FIRECRAWL_LOCAL_TOKEN=$(openssl rand -hex 32)" > .env)
+docker compose up -d
 ```
 
-Compose binds to loopback by default. For another machine on your tailnet, set
-`FIRECRAWL_BIND_ADDRESS` to the Docker host's Tailscale IP in `.env`. Set
-`FIRECRAWL_LOCAL_ALLOWED_HOSTS` to the address or DNS name the clients will use,
-then run `docker compose up -d` again.
+It listens on `127.0.0.1:3002`. To reach it from other machines, add two lines to `.env`, the address to listen on (such as this host's Tailscale IP) and the name clients will use, then run `docker compose up -d` again:
 
-## Connect Codex or Claude Code
+```
+FIRECRAWL_BIND_ADDRESS=100.101.102.103
+FIRECRAWL_HOSTNAME=myserver
+```
 
-Run these commands on the machine running the agent with Node.js 22 or newer.
-Use the server's tailnet URL when it runs on a different machine. Paste the
-bearer token from the server's `.env` into the hidden prompt.
+## Connect Claude Code or Codex
+
+On the agent's machine (Node.js 22 or newer), with the token from `.env`:
 
 ```bash
-FIRECRAWL_URL=http://127.0.0.1:3002
-printf 'Firecrawl token: ' >&2
-read -rs FIRECRAWL_LOCAL_TOKEN
-printf '\n'
+claude mcp add firecrawl-local -e FIRECRAWL_API_URL=http://myserver:3002 -e FIRECRAWL_API_KEY=<token> -- npx -y firecrawl-mcp
+codex mcp add firecrawl-local --env FIRECRAWL_API_URL=http://myserver:3002 --env FIRECRAWL_API_KEY=<token> -- npx -y firecrawl-mcp
 ```
 
-Codex:
-
-```bash
-codex mcp add firecrawl-local \
-  --env "FIRECRAWL_API_URL=$FIRECRAWL_URL" \
-  --env "FIRECRAWL_API_KEY=$FIRECRAWL_LOCAL_TOKEN" \
-  -- npx -y firecrawl-mcp
-```
-
-Claude Code:
-
-```bash
-claude mcp add --scope user firecrawl-local \
-  -e "FIRECRAWL_API_URL=$FIRECRAWL_URL" \
-  -e "FIRECRAWL_API_KEY=$FIRECRAWL_LOCAL_TOKEN" \
-  -- npx -y firecrawl-mcp
-```
-
-Use your normal web search to discover sources. Ask for `firecrawl-local` to
-read documents, scrape selected URLs, or crawl a section of a site. Start
-with a small page limit and narrow the path for documentation crawls.
-
-Any Firecrawl SDK takes the same two values:
-
-```python
-from firecrawl import Firecrawl
-
-app = Firecrawl(api_url="http://myserver:3002", api_key="<FIRECRAWL_LOCAL_TOKEN>")
-print(app.scrape("https://example.com").markdown)
-```
+Firecrawl SDKs take the same two values, for example `Firecrawl(api_url="http://myserver:3002", api_key="<token>")` in Python.
 
 ## What runs where
 
@@ -98,40 +54,28 @@ Requests sent on to Firecrawl Cloud use the container's own `FIRECRAWL_API_KEY`,
 
 ## Configuration
 
-| Variable | Default | Effect |
+Set these in `.env`:
+
+| Variable | Default | |
 | --- | --- | --- |
-| `FIRECRAWL_BIND_ADDRESS` | `127.0.0.1` | Host address where Compose publishes port 3002. |
 | `FIRECRAWL_LOCAL_TOKEN` | required | Bearer token for every request, including `/health`. |
-| `FIRECRAWL_LOCAL_ALLOWED_HOSTS` | | Comma-separated host names clients may address, for example `myserver,192.168.1.10`. `localhost` and `127.0.0.1` always work. Added by this image: Firecrawl Local only takes `--allowed-host` flags. |
-| `FIRECRAWL_API_KEY` | | Firecrawl key for search, Alexandria and the blocked-page fallback. |
-| `FIRECRAWL_CLOUD` | `off` in Compose | `search` enables hosted search. `auto` also enables the blocked-page fallback and Alexandria. |
-| `FIRECRAWL_LOCAL_BROWSER` | `auto` | Launch Chromium when needed. Use `never` for HTTP-only or `always` to render every scrape. |
-| `FIRECRAWL_LOCAL_SCROLL` | off | `1` scrolls pages before reading them, for lazy-loaded content. Firecrawl Local treats any value, even `0`, as on; this image treats empty, `0`, `false`, `no` and `off` as off. |
-| `FIRECRAWL_LOCAL_ALLOW_PRIVATE` | off | Lets callers scrape localhost and private addresses. Leave off unless every caller is trusted. |
+| `FIRECRAWL_BIND_ADDRESS` | `127.0.0.1` | Host address the port is published on. |
+| `FIRECRAWL_HOSTNAME` | `localhost` | Name clients use to reach the server. Requests addressed to any other name are refused. |
+| `FIRECRAWL_CLOUD` | `off` | `search` sends search to Firecrawl Cloud; `auto` also sends Alexandria and pages that block you. |
+| `FIRECRAWL_API_KEY` | | Firecrawl key for those cloud features. |
 
-To pass other upstream settings to the container, add them under the service’s `environment` in Compose. See the [Firecrawl Local docs](https://docs.firecrawl.dev/quickstarts/firecrawl-local#configuration). Keep the container's port at 3002 (the health check uses it) and remap it with `ports:` instead.
-
-The image starts `serve` by default. For a one-off scrape, pass
-`scrape https://example.com --markdown` to `docker run` and apply the same
-seccomp profile if the scrape uses Chromium.
+Other [Firecrawl Local settings](https://docs.firecrawl.dev/quickstarts/firecrawl-local#configuration) go under `environment:` in `compose.yaml`. Keep the container port at 3002, which the health check uses.
 
 ## Security
 
 - Keep the token private and bind to loopback or a trusted VPN interface such as Tailscale.
-- Compose uses [a seccomp profile](seccomp_profile.json) based on Playwright's
-  profile. It permits Chromium to create its user namespace and call `chroot`
-  inside it. The container drops all Docker capabilities, so the process cannot
-  chroot in the container's parent namespace.
-- `serve` refuses localhost and private-network targets unless `FIRECRAWL_LOCAL_ALLOW_PRIVATE` is set, and always refuses link-local and cloud-metadata addresses, including after redirects.
+- Compose uses [a seccomp profile](seccomp_profile.json) based on Playwright's. It lets Chromium create its sandbox's user namespace and `chroot` inside it. With every Docker capability dropped, nothing can `chroot` in the container itself; the smoke tests check this.
+- `serve` refuses localhost and private-network targets unless `FIRECRAWL_LOCAL_ALLOW_PRIVATE` is set (only do that if every caller is trusted), and always refuses link-local and cloud-metadata addresses, including after redirects.
 - The compose file runs the container read-only, as a non-root user, with no capabilities and `no-new-privileges`.
 
 ## Storage and memory
 
-Chromium profiles and temporary files live in a 512 MiB memory-backed
-`/tmp`. The service has a 2 GiB memory limit with swap disabled and rotates
-logs after three 10 MB files. The named volume holds Firecrawl Local's install
-state. Crawl and batch results are held in RAM. They expire after one hour
-and are purged the next time a job is created or looked up.
+Chromium's profiles and temporary files live in a 512 MiB in-memory `/tmp`. The service is capped at 2 GiB of memory with no swap, and keeps three 10 MB log files. The named volume holds only Firecrawl Local's install ID. Crawl and batch results stay in memory for up to an hour, until the next job is created or looked up.
 
 ## Tags and updates
 
@@ -139,15 +83,11 @@ and are purged the next time a job is created or looked up.
 | --- | --- |
 | `latest` | Newest build. |
 | `<version>`, such as `0.1.1` | Newest build of that Firecrawl Local version. |
-| `<version>-<YYYYMMDD>-<run>-<attempt>` | One build, never reused. Pin this or its digest to stay on a known image. |
+| `<version>-<YYYYMMDDHHMM>` | One build, never reused. Pin this or its digest to stay on a known image. |
 
-The [daily workflow](.github/workflows/build.yml) checks for new Firecrawl
-Local and Chromium versions. Each architecture uses matching versions of
-`chromium-headless-shell` and `chromium-common` from Debian. Check the
-[Debian security tracker](https://security-tracker.debian.org/tracker/source-package/chromium)
-for patch status. Monday builds also refresh other Debian packages. Native runners test the actual Compose service, and
-the release verifies the tested image config digests before updating the
-floating tags.
+A [daily workflow](.github/workflows/build.yml) publishes a new image when crates.io has a new Firecrawl Local, when Debian has a new Chromium for either architecture, or when Debian has updates for any other package in the image. Both architectures are built on native runners and must pass the [smoke tests](test/smoke.sh), which run the real `compose.yaml`. The release checks that the pushed images are the ones tested and attests them before `latest` moves.
+
+Chromium security fixes reach Debian, and so this image, usually within a few days of Google's release. The [Debian security tracker](https://security-tracker.debian.org/tracker/source-package/chromium) shows the current status.
 
 To update automatically, follow `latest` with a tool such as [Dockhand](https://dockhand.pro) or [What's Up Docker](https://github.com/getwud/wud).
 

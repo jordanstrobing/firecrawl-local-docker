@@ -11,9 +11,9 @@ ghcr.io/jordanstrobing/firecrawl-local-docker:<version>
 
 A GitHub Actions workflow runs daily on a native arm64 runner:
 
-- If crates.io has a `firecrawl-local` version with no image yet, it builds and pushes `:<version>` and `:latest`.
-- Every Monday it rebuilds anyway, so Chromium and Debian security fixes land.
-- Each build is smoke-tested by scraping example.com before the workflow finishes.
+- It rebuilds when crates.io has a new `firecrawl-local` version **or** Debian 13 has a new Chromium. Both versions are pinned in the image's labels, which is how it tells.
+- Every Monday it rebuilds anyway, so the rest of the Debian packages stay patched.
+- A build is pushed (`:<version>` and `:latest`) only after it scrapes a static page and a JavaScript-only page inside the container.
 
 Run it by hand from the Actions tab (`force` rebuilds the current version).
 

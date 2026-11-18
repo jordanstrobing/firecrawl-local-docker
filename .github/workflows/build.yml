@@ -1,14 +1,15 @@
 name: build
 
-# Daily: build when crates.io has a new firecrawl-local version.
-# Weekly: rebuild anyway so Chromium and Debian security fixes land.
+# Daily: rebuild when crates.io has a new firecrawl-local version
+#        or Debian has a new Chromium (security fixes land there first).
+# Weekly: rebuild anyway so the rest of the Debian packages stay patched.
 on:
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
     inputs:
       force:
-        description: "Rebuild even if this version is already published"
+        description: "Rebuild even if nothing changed"
         type: boolean
         default: false
   push:
@@ -33,25 +34,38 @@ jobs:
       - name: Decide whether to build
         id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
           FORCE: ${{ inputs.force || 'false' }}
           EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          version=$(curl -fsS -A "firecrawl-local-docker (GitHub Actions)" \
-            https://crates.io/api/v1/crates/firecrawl-local | jq -r .crate.max_version)
           image="ghcr.io/${GITHUB_REPOSITORY,,}"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "image=$image" >> "$GITHUB_OUTPUT"
-          build=false
-          if ! docker manifest inspect "$image:$version" >/dev/null 2>&1; then
-            echo "New version $version"; build=true
-          elif [ "$FORCE" = "true" ] || [ "$EVENT" = "push" ]; then
-            echo "Forced rebuild"; build=true
-          elif [ "$EVENT" = "schedule" ] && [ "$(date -u +%u)" = "1" ]; then
-            echo "Weekly rebuild for base image updates"; build=true
+          firecrawl=$(curl -fsS -A "firecrawl-local-docker (GitHub Actions)" \
+            https://crates.io/api/v1/crates/firecrawl-local | jq -r .crate.max_version)
+          chromium=$(docker run --rm debian:trixie-slim sh -c \
+            'apt-get update -qq >/dev/null && apt-cache policy chromium' | awk '/Candidate/{print $2}')
+          [ -n "$firecrawl" ] && [ -n "$chromium" ] || { echo "Could not read versions"; exit 1; }
+
+          current_fc=none; current_cr=none
+          if docker pull -q "$image:latest" >/dev/null 2>&1; then
+            current_fc=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$image:latest")
+            current_cr=$(docker inspect -f '{{index .Config.Labels "dev.firecrawl-local.chromium-version"}}' "$image:latest")
           fi
-          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "Firecrawl Local: published $current_fc, available $firecrawl"
+          echo "Chromium:        published $current_cr, available $chromium"
+
+          build=false
+          if [ "$current_fc" != "$firecrawl" ]; then echo "→ new Firecrawl Local"; build=true; fi
+          if [ "$current_cr" != "$chromium" ]; then echo "→ new Chromium"; build=true; fi
+          if [ "$FORCE" = "true" ] || [ "$EVENT" = "push" ]; then echo "→ forced"; build=true; fi
+          if [ "$EVENT" = "schedule" ] && [ "$(date -u +%u)" = "1" ]; then echo "→ weekly refresh"; build=true; fi
+
+          {
+            echo "image=$image"
+            echo "firecrawl=$firecrawl"
+            echo "chromium=$chromium"
+            echo "build=$build"
+          } >> "$GITHUB_OUTPUT"
+          echo "### Firecrawl Local $firecrawl · Chromium $chromium · build=$build" >> "$GITHUB_STEP_SUMMARY"
 
       - uses: docker/setup-buildx-action@v3
         if: steps.plan.outputs.build == 'true'
@@ -63,29 +77,53 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      # The Rust compile is cached; the runtime stage is always rebuilt so
+      # apt upgrades are never served from cache.
       - uses: docker/build-push-action@v6
         if: steps.plan.outputs.build == 'true'
         with:
           context: .
           platforms: linux/arm64
           pull: true
-          push: true
-          build-args: FIRECRAWL_LOCAL_VERSION=${{ steps.plan.outputs.version }}
-          tags: |
-            ${{ steps.plan.outputs.image }}:latest
-            ${{ steps.plan.outputs.image }}:${{ steps.plan.outputs.version }}
+          load: true
+          no-cache-filters: runtime
+          build-args: |
+            FIRECRAWL_LOCAL_VERSION=${{ steps.plan.outputs.firecrawl }}
+            CHROMIUM_VERSION=${{ steps.plan.outputs.chromium }}
+          tags: firecrawl-local:candidate
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Only a candidate that scrapes both a static and a JavaScript page is pushed.
       - name: Smoke test
         if: steps.plan.outputs.build == 'true'
         run: |
           set -euo pipefail
-          img="${{ steps.plan.outputs.image }}:${{ steps.plan.outputs.version }}"
-          docker run --rm "$img" --version
-          docker run -d --name fc -p 3002:3002 -e FIRECRAWL_LOCAL_TOKEN=ci-test -e FIRECRAWL_CLOUD=off "$img"
-          for i in $(seq 1 20); do curl -fsS localhost:3002/health && break; sleep 1; done
-          curl -fsS localhost:3002/v2/scrape -H 'authorization: Bearer ci-test' \
-            -H 'content-type: application/json' \
-            -d '{"url":"https://example.com","formats":["markdown"]}' | jq -e '.data.markdown | length > 0'
-          docker logs fc
+          curl -fsSLO https://raw.githubusercontent.com/microsoft/playwright/main/utils/docker/seccomp_profile.json
+          docker run --rm firecrawl-local:candidate --version
+          docker run --rm --entrypoint chromium firecrawl-local:candidate --version
+          docker run -d --name fc -p 3002:3002 --shm-size 1g \
+            --security-opt seccomp=seccomp_profile.json \
+            -e FIRECRAWL_LOCAL_TOKEN=ci-test -e FIRECRAWL_CLOUD=off firecrawl-local:candidate
+          for i in $(seq 1 30); do curl -fsS localhost:3002/health && break; sleep 1; done
+          scrape() {
+            curl -fsS localhost:3002/v2/scrape -H 'authorization: Bearer ci-test' \
+              -H 'content-type: application/json' -d "$1"
+          }
+          scrape '{"url":"https://example.com","formats":["markdown"]}' \
+            | jq -e '.data.markdown | test("Example Domain")'
+          # quotes.toscrape.com/js renders its content with JavaScript only
+          scrape '{"url":"https://quotes.toscrape.com/js/","formats":["markdown"]}' \
+            | tee /tmp/js.json | jq -e '.data.markdown | test("Einstein")' \
+            || { jq '.data.warning, .warning' /tmp/js.json; docker logs fc; exit 1; }
+          docker logs fc 2>&1 | tail -20
+
+      - name: Push
+        if: steps.plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          image="${{ steps.plan.outputs.image }}"
+          for tag in latest "${{ steps.plan.outputs.firecrawl }}"; do
+            docker tag firecrawl-local:candidate "$image:$tag"
+            docker push -q "$image:$tag"
+          done

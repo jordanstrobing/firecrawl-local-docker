@@ -125,6 +125,14 @@ seccomp profile if the scrape uses Chromium.
 - `serve` refuses localhost and private-network targets unless `FIRECRAWL_LOCAL_ALLOW_PRIVATE` is set, and always refuses link-local and cloud-metadata addresses, including after redirects.
 - The compose file runs the container read-only, as a non-root user, with no capabilities and `no-new-privileges`.
 
+## Storage and memory
+
+Chromium profiles and temporary files live in a 512 MiB memory-backed
+`/tmp`. The service has a 2 GiB memory limit with swap disabled and rotates
+logs after three 10 MB files. The named volume holds Firecrawl Local's install
+state. Crawl and batch results are held in RAM. They expire after one hour
+and are purged the next time a job is created or looked up.
+
 ## Tags and updates
 
 | Tag | Meaning |

@@ -46,29 +46,20 @@ curl -H "Authorization: Bearer $(sed -n 's/^FIRECRAWL_LOCAL_TOKEN=//p' .env)" ht
 
 You should see `{"status":"ok","engine":"firecrawl-local","version":"…"}`.
 
-**3. Connect your agent**
+**3. Connect your agents**
 
-On the machine running the agent (with Node.js 22 or newer), replace `<token>` with the token from `.env`:
-
-```bash
-# Claude Code
-claude mcp add firecrawl-local -e FIRECRAWL_API_URL=http://127.0.0.1:3002 -e FIRECRAWL_API_KEY=<token> -- npx -y firecrawl-mcp
-
-# Codex
-codex mcp add firecrawl-local --env FIRECRAWL_API_URL=http://127.0.0.1:3002 --env FIRECRAWL_API_KEY=<token> -- npx -y firecrawl-mcp
-```
-
-Firecrawl's SDKs take the same two values, for example `Firecrawl(api_url="http://127.0.0.1:3002", api_key="<token>")` in Python.
-
-**4. Teach your agent when to use it**
-
-Agents tend to stick with their built-in fetch tool, which can't render JavaScript and often summarizes pages. This repository includes a [skill](skills/firecrawl-local/SKILL.md) in the open [Agent Skills](https://agentskills.io) format that tells them when to use Firecrawl and how to keep its output small. Install it for Claude Code, Codex or any other supported agent:
+On the machine running your agents (with Node.js 22 or newer), run these two commands. Each asks which agents to set up: Claude Code, Codex, OpenCode, Cursor and [many others](https://github.com/neon-solutions/add-mcp#supported-agents).
 
 ```bash
+npx add-mcp firecrawl-mcp --name firecrawl-local -g --env 'FIRECRAWL_API_URL=${FIRECRAWL_API_URL}' --env 'FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}'
 npx skills add jordanstrobing/firecrawl-local-docker -g
 ```
 
-In Claude Code, you can also skip the approval prompt for these tools by adding `mcp__firecrawl-local__firecrawl_scrape`, `mcp__firecrawl-local__firecrawl_map`, `mcp__firecrawl-local__firecrawl_crawl` and `mcp__firecrawl-local__firecrawl_check_crawl_status` to `permissions.allow` in your settings.
+The first connects your agents to the server through Firecrawl's MCP server, and asks for the URL (`http://127.0.0.1:3002`) and the token from `.env`. The second installs a [skill](skills/firecrawl-local/SKILL.md) that tells agents when to use Firecrawl instead of their built-in fetch tool, which can't render JavaScript, and how to keep its output small.
+
+To skip the approval prompt each time an agent reads a page, add `--auto-approve --approve-tool firecrawl_scrape --approve-tool firecrawl_map --approve-tool firecrawl_crawl --approve-tool firecrawl_check_crawl_status` to the first command (Claude Code and Codex).
+
+Firecrawl's SDKs take the same URL and token, for example `Firecrawl(api_url="http://127.0.0.1:3002", api_key="<token>")` in Python.
 
 ## Use it from other devices
 

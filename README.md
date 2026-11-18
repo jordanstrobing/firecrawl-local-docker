@@ -14,11 +14,23 @@ Scrape pages and documents, map links, and crawl sites through the Firecrawl v2 
 
 ## Run it
 
+You need Docker Engine with Compose v2, git and openssl, in a Linux, macOS or WSL2 shell. The image is tested on Linux with Docker Engine on amd64 and arm64; Docker Desktop and Podman are untested.
+
 ```bash
 git clone https://github.com/jordanstrobing/firecrawl-local-docker && cd firecrawl-local-docker
 (umask 077; echo "FIRECRAWL_LOCAL_TOKEN=$(openssl rand -hex 32)" > .env)
 docker compose up -d
 ```
+
+Check that it answers:
+
+```bash
+curl -H "Authorization: Bearer $(sed -n 's/^FIRECRAWL_LOCAL_TOKEN=//p' .env)" http://127.0.0.1:3002/health
+```
+
+A `401` means the token is missing or wrong. A `403` means the request was addressed to a name other than `localhost` or `FIRECRAWL_HOSTNAME`.
+
+If you deploy through a UI such as Portainer or Unraid, point it at this Git repository, or put `seccomp_profile.json` next to the compose file: Compose reads it from there.
 
 It listens on `127.0.0.1:3002`. To reach it from other machines, add two lines to `.env`, the address to listen on (such as this host's Tailscale IP) and the name clients will use, then run `docker compose up -d` again:
 
@@ -73,7 +85,11 @@ Other [Firecrawl Local settings](https://docs.firecrawl.dev/quickstarts/firecraw
 - `serve` refuses localhost and private-network targets unless `FIRECRAWL_LOCAL_ALLOW_PRIVATE` is set (only do that if every caller is trusted), and always refuses link-local and cloud-metadata addresses, including after redirects.
 - The compose file runs the container read-only, as a non-root user, with no capabilities and `no-new-privileges`.
 
-## Storage and memory
+Report vulnerabilities in the image privately, with **Report a vulnerability** on this repository's Security tab. Report vulnerabilities in Firecrawl Local itself to Firecrawl at help@firecrawl.com, not in a public issue.
+
+## Resources
+
+On a Raspberry Pi 5, the service idles at about 5 MB of memory and stays under 10 MB for ordinary pages. The first JavaScript page or screenshot starts Chromium: about 110 MB for one page, about 140 MB for two at once, and about 80 MB once idle again. The image is about 270 MB to download and 1 GB on disk.
 
 Chromium's profiles and temporary files live in a 512 MiB in-memory `/tmp`. The service is capped at 2 GiB of memory with no swap, and keeps three 10 MB log files. The named volume holds only Firecrawl Local's install ID. Crawl and batch results stay in memory for up to an hour, until the next job is created or looked up.
 
@@ -89,7 +105,7 @@ A [daily workflow](.github/workflows/build.yml) publishes a new image when crate
 
 Chromium security fixes reach Debian, and so this image, usually within a few days of Google's release. The [Debian security tracker](https://security-tracker.debian.org/tracker/source-package/chromium) shows the current status.
 
-To update automatically, follow `latest` with a tool such as [Dockhand](https://dockhand.pro) or [What's Up Docker](https://github.com/getwud/wud).
+To update, run `docker compose pull && docker compose up -d`, or follow `latest` with a tool such as [Dockhand](https://dockhand.pro) or [What's Up Docker](https://github.com/getwud/wud). Each update leaves the previous image behind, so prune old images now and then. To roll back, set `image:` in `compose.yaml` to a `<version>-<YYYYMMDDHHMM>` tag.
 
 ## Verify an image
 

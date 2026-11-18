@@ -70,7 +70,9 @@ request v2/scrape -d "{\"url\":\"$site/document.pdf\",\"formats\":[\"markdown\"]
   | jq -e '.success and (.data.markdown | contains("pdf-marker-4b2d"))' >/dev/null
 request v2/scrape -d "{\"url\":\"$site/js.html\",\"formats\":[\"markdown\",\"screenshot\"]}" \
   | jq -e '.success and (.data.markdown | contains("js-marker-c91e")) and (.data.screenshot | startswith("data:image/png;base64,iVBORw0KGgo"))' >/dev/null
-printf 'Passed static HTML, PDF, JavaScript and PNG screenshot\n'
+request v2/map -d "{\"url\":\"$site/static.html\",\"sitemap\":\"skip\"}" \
+  | jq -e '.success and any(.links[]; .url | endswith("/js.html"))' >/dev/null
+printf 'Passed static HTML, PDF, JavaScript, PNG screenshot and map\n'
 
 job=$(request v2/crawl -d "{\"url\":\"$site/static.html\",\"limit\":2,\"maxDiscoveryDepth\":1,\"crawlEntireDomain\":true,\"sitemap\":\"skip\"}" \
   | jq -er 'select(.success).id')

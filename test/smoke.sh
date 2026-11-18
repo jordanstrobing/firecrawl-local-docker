@@ -6,7 +6,7 @@ set -euo pipefail
 export SMOKE_IMAGE=${1:?usage: test/smoke.sh IMAGE}
 export SMOKE_PROJECT="firecrawl-smoke-$$-$RANDOM"
 export FIRECRAWL_LOCAL_TOKEN=smoke-test-token
-export FIRECRAWL_LOCAL_ALLOWED_HOSTS="firecrawl.test, other.test"
+export FIRECRAWL_HOSTNAME=firecrawl.test
 export FIRECRAWL_API_KEY=
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 compose=(docker compose -p "$SMOKE_PROJECT" --env-file /dev/null -f "$here/../compose.yaml" -f "$here/compose.yaml")
@@ -59,7 +59,6 @@ expect_status 401 "$api/health"
 expect_status 401 -H 'Authorization: Bearer wrong' "$api/health"
 expect_status 403 -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" -H 'Host: unknown.test' "$api/health"
 expect_status 200 -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" -H 'Host: firecrawl.test:3002' "$api/health"
-expect_status 200 -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" -H 'Host: other.test' "$api/health"
 request health | jq -e '.status == "ok" and .engine == "firecrawl-local" and (.version | length > 0)' >/dev/null
 expect_status 501 -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" \
   -H 'Content-Type: application/json' -d '{"query":"example"}' "$api/v2/search"

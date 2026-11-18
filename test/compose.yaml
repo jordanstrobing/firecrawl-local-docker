@@ -2,7 +2,6 @@ services:
   firecrawl-local:
     image: ${SMOKE_IMAGE:?set SMOKE_IMAGE}
     pull_policy: never
-    container_name: ${SMOKE_PROJECT:?set SMOKE_PROJECT}
     ports: !override ["127.0.0.1::3002"]
     environment:
       FIRECRAWL_CLOUD: "off"

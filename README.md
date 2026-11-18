@@ -15,63 +15,28 @@ Scrape pages and documents, map links, and crawl sites through the Firecrawl v2 
 ## Run it
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/jordanstrobing/firecrawl-local-docker/main/compose.yaml
-curl -fsSLO https://raw.githubusercontent.com/jordanstrobing/firecrawl-local-docker/main/seccomp_profile.json
-(
-  umask 077
-  set -C
-  printf 'FIRECRAWL_LOCAL_TOKEN=%s\n' "$(openssl rand -hex 32)" > .env
-)
-docker compose up -d --wait
-
-source .env
-curl -fsS http://127.0.0.1:3002/v2/scrape \
-  -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"url":"https://example.com","formats":["markdown"]}'
+git clone https://github.com/jordanstrobing/firecrawl-local-docker && cd firecrawl-local-docker
+echo "FIRECRAWL_LOCAL_TOKEN=$(openssl rand -hex 32)" > .env
+docker compose up -d
 ```
 
-Compose listens on loopback only. To serve other machines, set `FIRECRAWL_BIND_ADDRESS` in `.env` to an address they can reach, such as the host's Tailscale IP, and `FIRECRAWL_LOCAL_ALLOWED_HOSTS` to the name or address they will use. Then run `docker compose up -d` again.
+It listens on `127.0.0.1:3002`. To reach it from other machines, add two lines to `.env`, the address to listen on (such as this host's Tailscale IP) and the name clients will use, then run `docker compose up -d` again:
 
-## Connect Codex or Claude Code
+```
+FIRECRAWL_BIND_ADDRESS=100.101.102.103
+FIRECRAWL_HOSTNAME=myserver
+```
 
-On the machine running the agent (Node.js 22 or newer), set the server's URL and paste the token from its `.env` at the hidden prompt:
+## Connect Claude Code or Codex
+
+On the agent's machine (Node.js 22 or newer), with the token from `.env`:
 
 ```bash
-FIRECRAWL_URL=http://127.0.0.1:3002
-printf 'Firecrawl token: ' >&2
-read -rs FIRECRAWL_LOCAL_TOKEN
-printf '\n'
+claude mcp add firecrawl-local -e FIRECRAWL_API_URL=http://myserver:3002 -e FIRECRAWL_API_KEY=<token> -- npx -y firecrawl-mcp
+codex mcp add firecrawl-local --env FIRECRAWL_API_URL=http://myserver:3002 --env FIRECRAWL_API_KEY=<token> -- npx -y firecrawl-mcp
 ```
 
-Codex:
-
-```bash
-codex mcp add firecrawl-local \
-  --env "FIRECRAWL_API_URL=$FIRECRAWL_URL" \
-  --env "FIRECRAWL_API_KEY=$FIRECRAWL_LOCAL_TOKEN" \
-  -- npx -y firecrawl-mcp
-```
-
-Claude Code:
-
-```bash
-claude mcp add --scope user firecrawl-local \
-  -e "FIRECRAWL_API_URL=$FIRECRAWL_URL" \
-  -e "FIRECRAWL_API_KEY=$FIRECRAWL_LOCAL_TOKEN" \
-  -- npx -y firecrawl-mcp
-```
-
-Keep using the agent's own web search to find sources, and Firecrawl Local to read them. For crawls, start with a small page limit and a narrow path.
-
-Any Firecrawl SDK takes the same two values:
-
-```python
-from firecrawl import Firecrawl
-
-app = Firecrawl(api_url="http://myserver:3002", api_key="<FIRECRAWL_LOCAL_TOKEN>")
-print(app.scrape("https://example.com").markdown)
-```
+Firecrawl SDKs take the same two values, for example `Firecrawl(api_url="http://myserver:3002", api_key="<token>")` in Python.
 
 ## What runs where
 
@@ -89,26 +54,23 @@ Requests sent on to Firecrawl Cloud use the container's own `FIRECRAWL_API_KEY`,
 
 ## Configuration
 
-| Variable | Default | Effect |
+Set these in `.env`:
+
+| Variable | Default | |
 | --- | --- | --- |
-| `FIRECRAWL_BIND_ADDRESS` | `127.0.0.1` | Host address where Compose publishes port 3002. |
 | `FIRECRAWL_LOCAL_TOKEN` | required | Bearer token for every request, including `/health`. |
-| `FIRECRAWL_LOCAL_ALLOWED_HOSTS` | | Comma-separated host names clients may address, for example `myserver,192.168.1.10`. `localhost` and `127.0.0.1` always work. Added by this image: Firecrawl Local only takes `--allowed-host` flags. |
-| `FIRECRAWL_API_KEY` | | Firecrawl key for search, Alexandria and the blocked-page fallback. |
-| `FIRECRAWL_CLOUD` | `off` in Compose | `search` enables hosted search. `auto` also enables the blocked-page fallback and Alexandria. |
-| `FIRECRAWL_LOCAL_BROWSER` | `auto` | Launch Chromium when needed. Use `never` for HTTP-only or `always` to render every scrape. |
-| `FIRECRAWL_LOCAL_SCROLL` | off | `1` scrolls pages before reading them, for lazy-loaded content. Firecrawl Local treats any value, even `0`, as on; this image treats empty, `0`, `false`, `no` and `off` as off. |
-| `FIRECRAWL_LOCAL_ALLOW_PRIVATE` | off | Lets callers scrape localhost and private addresses. Leave off unless every caller is trusted. |
+| `FIRECRAWL_BIND_ADDRESS` | `127.0.0.1` | Host address the port is published on. |
+| `FIRECRAWL_HOSTNAME` | `localhost` | Name clients use to reach the server. Requests addressed to any other name are refused. |
+| `FIRECRAWL_CLOUD` | `off` | `search` sends search to Firecrawl Cloud; `auto` also sends Alexandria and pages that block you. |
+| `FIRECRAWL_API_KEY` | | Firecrawl key for those cloud features. |
 
-To pass other upstream settings to the container, add them under the service’s `environment` in Compose. See the [Firecrawl Local docs](https://docs.firecrawl.dev/quickstarts/firecrawl-local#configuration). Keep the container's port at 3002 (the health check uses it) and remap it with `ports:` instead.
-
-The image runs `serve` by default. For a one-off scrape, pass `scrape https://example.com --markdown` to `docker run`, with the same seccomp profile if the page needs Chromium.
+Other [Firecrawl Local settings](https://docs.firecrawl.dev/quickstarts/firecrawl-local#configuration) go under `environment:` in `compose.yaml`. Keep the container port at 3002, which the health check uses.
 
 ## Security
 
 - Keep the token private and bind to loopback or a trusted VPN interface such as Tailscale.
 - Compose uses [a seccomp profile](seccomp_profile.json) based on Playwright's. It lets Chromium create its sandbox's user namespace and `chroot` inside it. With every Docker capability dropped, nothing can `chroot` in the container itself; the smoke tests check this.
-- `serve` refuses localhost and private-network targets unless `FIRECRAWL_LOCAL_ALLOW_PRIVATE` is set, and always refuses link-local and cloud-metadata addresses, including after redirects.
+- `serve` refuses localhost and private-network targets unless `FIRECRAWL_LOCAL_ALLOW_PRIVATE` is set (only do that if every caller is trusted), and always refuses link-local and cloud-metadata addresses, including after redirects.
 - The compose file runs the container read-only, as a non-root user, with no capabilities and `no-new-privileges`.
 
 ## Storage and memory

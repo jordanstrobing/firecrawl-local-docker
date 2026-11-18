@@ -15,7 +15,6 @@ on:
       - compose.yaml
       - .dockerignore
       - LICENSE
-      - rootfs/**
       - licenses/**
       - seccomp_profile.json
       - test/**

@@ -8,6 +8,7 @@ ARG CHROMIUM_VERSION=
 FROM rust:1-slim-trixie AS build
 ARG FIRECRAWL_LOCAL_VERSION
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+# hadolint ignore=DL3008
 RUN apt-get update \
  && apt-get install -y --no-install-recommends build-essential \
  && rm -rf /var/lib/apt/lists/*
@@ -33,7 +34,9 @@ ARG FIRECRAWL_LOCAL_VERSION
 ARG CHROMIUM_VERSION
 # Chromium's headless shell: Debian's full chromium package drags in GTK and,
 # through it, systemd (about 155 MB more) and uses twice the memory per page.
+# Only Chromium is pinned, so every rebuild picks up Debian's security fixes.
 # curl is for the health check; tini reaps Chromium's orphaned processes.
+# hadolint ignore=DL3008
 RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
@@ -49,7 +52,6 @@ COPY --from=build /out/share/doc/firecrawl-local/ /usr/share/doc/firecrawl-local
 COPY licenses/AGPL-3.0.txt /usr/share/doc/firecrawl-local/LICENSE
 COPY licenses/NOTICE /usr/share/doc/firecrawl-local/NOTICE
 COPY LICENSE /usr/share/doc/firecrawl-local/packaging-LICENSE
-COPY --chmod=0755 rootfs/usr/local/bin/ /usr/local/bin/
 
 LABEL org.opencontainers.image.title="Firecrawl Local (unofficial image)" \
       org.opencontainers.image.description="Firecrawl Local with Chromium. Not affiliated with Firecrawl." \
@@ -64,6 +66,8 @@ ENV FIRECRAWL_CHROME_PATH=/usr/lib/chromium/chromium-headless-shell
 USER 10001:10001
 WORKDIR /home/firecrawl
 EXPOSE 3002
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD ["healthcheck"]
-ENTRYPOINT ["/usr/bin/tini", "--", "docker-entrypoint"]
-CMD ["serve", "--host", "0.0.0.0", "--port", "3002"]
+# /health needs the token like every other route.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
+  CMD ["sh", "-c", "curl -fsS -o /dev/null -H \"Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN\" http://127.0.0.1:3002/health"]
+ENTRYPOINT ["/usr/bin/tini", "--", "firecrawl-local"]
+CMD ["serve", "--host", "0.0.0.0"]

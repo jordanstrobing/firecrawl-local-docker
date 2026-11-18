@@ -31,8 +31,8 @@ jobs:
         with:
           dockerfile: Dockerfile
 
-      - name: Shell scripts (shellcheck)
-        run: shellcheck --severity=style rootfs/usr/local/bin/* test/*.sh
+      - name: Smoke test (shellcheck)
+        run: shellcheck --severity=style test/*.sh
 
       - name: Compose file and seccomp profile
         run: |

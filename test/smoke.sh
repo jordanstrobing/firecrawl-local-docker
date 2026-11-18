@@ -74,7 +74,7 @@ request v2/scrape -d "{\"url\":\"$site/js.html\",\"formats\":[\"markdown\",\"scr
 printf 'Passed static HTML, PDF, JavaScript and PNG screenshot\n'
 
 job=$(request v2/crawl -d "{\"url\":\"$site/static.html\",\"limit\":2,\"maxDiscoveryDepth\":1,\"crawlEntireDomain\":true,\"sitemap\":\"skip\"}" \
-  | jq -er 'select(.success) | .id | strings | select(length > 0)')
+  | jq -er 'select(.success).id')
 for ((attempt = 0; attempt < 30; attempt++)); do
   result=$(request "v2/crawl/$job")
   status=$(jq -er '.status' <<<"$result")

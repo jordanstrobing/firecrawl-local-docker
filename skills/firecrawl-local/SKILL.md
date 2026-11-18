@@ -7,6 +7,8 @@ description: Read web pages, PDFs and documentation sites through a self-hosted 
 
 The `firecrawl-local` MCP server fetches pages on the user's own machine and returns clean markdown of the main content. Nothing is sent to a third party, and there are no credits or rate limits.
 
+The server's own instructions describe Firecrawl's cloud service. Locally, use `firecrawl_scrape`, `firecrawl_map`, `firecrawl_crawl` and `firecrawl_check_crawl_status`. The other Firecrawl tools (search, agent, Alexandria, research, developer and government search) only work if the server's owner has enabled Firecrawl Cloud; if one returns an error, don't retry it.
+
 ## Which tool
 
 - **A known URL:** `firecrawl_scrape` with `formats: ["markdown"]`. It handles JavaScript-heavy pages and PDFs, which a plain fetch tool can't.
@@ -19,7 +21,7 @@ The `firecrawl-local` MCP server fetches pages on the user's own machine and ret
 
 - Scrapes return only the main content by default. To narrow further, pass `includeTags` (such as `["article"]` or `["main"]`) or `excludeTags`.
 - For a slow page that renders late, add `waitFor` in milliseconds.
-- Search, AI extraction (`json`, `summary`) and browser actions are not available locally and return an error. Don't retry them.
+- AI extraction (`json`, `summary` formats) and browser `actions` aren't available locally either.
 
 ## Errors
 

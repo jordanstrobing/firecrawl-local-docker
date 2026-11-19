@@ -51,8 +51,15 @@ jobs:
         run: |
           set -euo pipefail
 
+          # The newest stable release that has been public for 3 days, so a
+          # compromised or broken release can be yanked before it reaches users.
           firecrawl=$(curl -fsS --retry 3 -A "firecrawl-local-docker (+https://github.com/${GITHUB_REPOSITORY})" \
-            https://crates.io/api/v1/crates/firecrawl-local | jq -er '.crate.max_stable_version | select(test("^[0-9]+[.][0-9]+[.][0-9]+$"))')
+            https://crates.io/api/v1/crates/firecrawl-local/versions \
+            | jq -er --argjson cutoff "$(( $(date -u +%s) - 3 * 86400 ))" '
+                [.versions[]
+                  | select((.yanked | not) and (.num | test("^[0-9]+[.][0-9]+[.][0-9]+$")))
+                  | select((.created_at | sub("[.][0-9]+"; "") | sub("[+]00:00$"; "Z") | fromdateiso8601) <= $cutoff)]
+                | sort_by(.num | split(".") | map(tonumber)) | last | .num')
 
           # Match chromium-common and chromium-headless-shell on each architecture.
           # Security releases can arrive at different times on the two architectures.
@@ -167,14 +174,6 @@ jobs:
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
-      - name: Log in to ghcr.io
-        if: needs.plan.outputs.publish == 'true'
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
       # The Rust compile is cached between runs. The runtime stage is always
       # rebuilt so Debian updates are never served from cache.
       - name: Build
@@ -199,6 +198,16 @@ jobs:
 
       - name: Smoke test
         run: test/smoke.sh firecrawl-local:candidate
+
+      # Only after the candidate passed, so no write credential is on the
+      # runner while untested code runs.
+      - name: Log in to ghcr.io
+        if: needs.plan.outputs.publish == 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       # Reuse the tested build's cache and attach the SBOM. Verify the image
       # config digest before handing the architecture digest to the release job.
@@ -301,4 +310,8 @@ jobs:
         run: |
           set -euo pipefail
           docker buildx imagetools create -t "$IMAGE:$FIRECRAWL" -t "$IMAGE:latest" "$IMAGE@$DIGEST"
+          for tag in "$FIRECRAWL" latest; do
+            moved=$(docker buildx imagetools inspect "$IMAGE:$tag" --format '{{json .Manifest}}' | jq -r .digest)
+            [[ "$moved" == "$DIGEST" ]] || { echo "::error::$IMAGE:$tag points to $moved, not $DIGEST"; exit 1; }
+          done
           echo "Published $IMAGE:$FIRECRAWL and $IMAGE:latest ($DIGEST)" >> "$GITHUB_STEP_SUMMARY"

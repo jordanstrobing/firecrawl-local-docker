@@ -109,7 +109,7 @@ docker compose pull && docker compose up -d
 
 To update automatically, use an updater such as [Dockhand](https://dockhand.pro) or [What's Up Docker](https://github.com/getwud/wud), and prune old images now and then.
 
-A new image is published within a day of a new Firecrawl Local, a new Chromium, or a Debian update to anything inside it. `latest` is the newest build, `0.1.0` the newest build of that version, and tags like `0.1.0-202611182337` name one build that never changes; set one as `image:` in `compose.override.yaml` to pin or roll back.
+A new image is published within a day of a new Chromium or a Debian update to anything inside it, and three days after a new Firecrawl Local release, so a bad release can be pulled before it reaches you. `latest` is the newest build, `0.1.0` the newest build of that version, and tags like `0.1.0-202611182337` name a single build. To pin or roll back, set `image:` in `compose.override.yaml` to a digest, such as `ghcr.io/jordanstrobing/firecrawl-local-docker@sha256:…`, which no one can change.
 
 Chromium fixes reach Debian, and this image, usually within a few days of Google's release. The [Debian security tracker](https://security-tracker.debian.org/tracker/source-package/chromium) shows the current status.
 
@@ -135,10 +135,11 @@ Report vulnerabilities in the image privately, with **Report a vulnerability** o
 
 ## How it's built
 
-A [daily workflow](.github/workflows/build.yml) checks crates.io and Debian for updates. When something changed, it builds both architectures on native runners and runs the [smoke tests](test/smoke.sh) against the real `compose.yaml`. Only images that pass are published, after checking they're identical to the ones tested, and each comes with a build attestation:
+A [daily workflow](.github/workflows/build.yml) checks crates.io and Debian for updates. When something changed, it builds both architectures on native runners and runs the [smoke tests](test/smoke.sh) against the real `compose.yaml`. Only images that pass are published, after checking they're identical to the ones tested, and each comes with a build attestation. To check that an image was built by this repository's workflow from `main`:
 
 ```bash
-gh attestation verify oci://ghcr.io/jordanstrobing/firecrawl-local-docker:latest --repo jordanstrobing/firecrawl-local-docker
+gh attestation verify oci://ghcr.io/jordanstrobing/firecrawl-local-docker:latest --repo jordanstrobing/firecrawl-local-docker \
+  --signer-workflow jordanstrobing/firecrawl-local-docker/.github/workflows/build.yml --source-ref refs/heads/main
 ```
 
 To build and test it yourself on Linux, with Docker Compose 2.24.4 or newer, curl and jq:

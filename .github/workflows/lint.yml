@@ -25,8 +25,8 @@ jobs:
       - name: Dockerfile (hadolint)
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
 
-      - name: Smoke test (shellcheck)
-        run: shellcheck test/*.sh
+      - name: Shell scripts (shellcheck)
+        run: shellcheck test/*.sh skills/*/scripts/*.sh
 
       - name: Agent Skill (skills-ref, the Agent Skills reference validator)
         run: >-

@@ -28,7 +28,7 @@ The MCP server's own instructions describe Firecrawl's cloud service. Its other 
 ## Which approach
 
 - **A known URL:** scrape it. Firecrawl handles JavaScript-heavy pages and PDFs, which a plain fetch tool can't.
-- **A site, but not the page:** map it with a `search` term (for example `"auth"`) lists matching URLs from the site's sitemaps and start page. Read only the page you need. If the site has no sitemap and map finds little, crawl it.
+- **A site, but not the page:** map it with a `search` term (for example `"auth"`) to list matching URLs from its sitemaps and start page, then read only the page you need. If map finds little because the site has no sitemap, crawl it.
 - **Several pages:** pick the URLs from map's list and batch them, rather than crawling. A crawl follows every link until its limit; a batch reads only what you chose.
 - **Where a page leads:** with MCP, `firecrawl_scrape` with `formats: ["links"]` returns only its links; with the script, search the saved page for `](`.
 - **APIs, JSON endpoints and raw files** (for example `raw.githubusercontent.com`): use `curl` or a plain fetch. Firecrawl is for web pages.

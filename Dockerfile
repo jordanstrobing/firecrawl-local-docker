@@ -1,7 +1,7 @@
 FROM rust:1-slim-trixie AS build
 # Empty means latest. CI passes exact versions so the labels match the contents.
 ARG FIRECRAWL_LOCAL_VERSION
-SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+SHELL ["/bin/bash", "-eu", "-c"]
 # hadolint ignore=SC2086
 RUN cargo install firecrawl-local ${FIRECRAWL_LOCAL_VERSION:+--version =$FIRECRAWL_LOCAL_VERSION} --locked --root /out
 

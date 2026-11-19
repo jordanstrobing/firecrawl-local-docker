@@ -47,6 +47,10 @@ def usable: problems == [];
 def status: ["HTTP \(.metadata.statusCode // "?")"] + [problems[] | select(startswith("HTTP") | not)]
   + [select(text | test("\\S") and length < 300) | "short"] + [.warning // empty] | join(", ");'
 
+# Leave out buttons: their labels end up inside the text, such as "Copy" glued
+# to the first line of code blocks on Stack Overflow. OPTIONS can add more tags.
+clean='.excludeTags = ["button"] + (.excludeTags // [])'
+
 case $1 in
   map)
     api map "$(jq -n --arg url "$2" --arg search "${3:-}" '{url: $url} + if $search == "" then {} else {search: $search} end')" \
@@ -55,7 +59,7 @@ case $1 in
     head -30 "$out/urls.txt"
     ;;
   page)
-    doc=$(api scrape "$(jq -n --arg url "$2" --argjson opts "${3:-null}" '{url: $url, formats: ["markdown"]} + ($opts // {})')" | jq -c '.data')
+    doc=$(api scrape "$(jq -n --arg url "$2" --argjson opts "${3:-null}" '{url: $url, formats: ["markdown"]} + ($opts // {}) | '"$clean")" | jq -c '.data')
     jq -r '.markdown // .html // .rawHtml // ""' <<< "$doc" > "$out/page.md"
     jq -r --arg file "$out/page.md" --argjson lines "$(wc -l < "$out/page.md")" "$problems"'
       "\($file): \($lines) lines, \(status)"
@@ -85,10 +89,11 @@ case $1 in
     # and the server is capped at 2 GB.
     if [[ $1 == batch ]]; then
       route=batch/scrape
-      body=$(jq -n '{urls: $ARGS.positional, formats: ["markdown"], maxConcurrency: 4}' --args "${@:2}")
+      body=$(jq -n '{urls: $ARGS.positional, formats: ["markdown"], maxConcurrency: 4} | '"$clean" --args "${@:2}")
     else
       route=crawl
-      body=$(jq -n --arg url "$2" --argjson opts "${3:-null}" '{url: $url, limit: 10, maxConcurrency: 4} + ($opts // {})')
+      body=$(jq -n --arg url "$2" --argjson opts "${3:-null}" '{url: $url, limit: 10, maxConcurrency: 4} + ($opts // {})
+        | .scrapeOptions |= ((. // {}) | '"$clean"')')
     fi
     id=$(api "$route" "$body" | jq -er '.id')
     deadline=$((SECONDS + 300)) # a 10-page crawl usually takes under a minute

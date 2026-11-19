@@ -31,7 +31,6 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    permissions: {}
     outputs:
       firecrawl: ${{ steps.versions.outputs.firecrawl }}
       chromium_amd64: ${{ steps.versions.outputs.chromium_amd64 }}
@@ -111,7 +110,10 @@ jobs:
           build=true
           publish=false
           if [[ "$EVENT" == schedule ]]; then
-            configs=$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{json .Image}}' || printf '{}')
+            if ! configs=$(docker buildx imagetools inspect "$IMAGE:latest" --format '{{json .Image}}'); then
+              echo "::warning::Couldn't read $IMAGE:latest, so building anyway"
+              configs='{}'
+            fi
             if jq -e --arg firecrawl "$FIRECRAWL" --arg amd64 "$CHROMIUM_AMD64" --arg arm64 "$CHROMIUM_ARM64" '
               def versions_match($arch; $chromium):
                 .["linux/" + $arch].config.Labels
@@ -151,6 +153,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Both builds must use the same inputs, or the pushed image won't match the tested one.
+    env:
+      BUILD_ARGS: |
+        FIRECRAWL_LOCAL_VERSION=${{ needs.plan.outputs.firecrawl }}
+        CHROMIUM_VERSION=${{ needs.plan.outputs[format('chromium_{0}', matrix.arch)] }}
+      LABELS: org.opencontainers.image.revision=${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -169,10 +177,8 @@ jobs:
           load: true
           no-cache-filters: runtime
           provenance: false
-          build-args: |
-            FIRECRAWL_LOCAL_VERSION=${{ needs.plan.outputs.firecrawl }}
-            CHROMIUM_VERSION=${{ needs.plan.outputs[format('chromium_{0}', matrix.arch)] }}
-          labels: org.opencontainers.image.revision=${{ github.sha }}
+          build-args: ${{ env.BUILD_ARGS }}
+          labels: ${{ env.LABELS }}
           tags: firecrawl-local:candidate
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
@@ -185,8 +191,8 @@ jobs:
           echo "Image size (${{ matrix.arch }}): $size MB" >> "$GITHUB_STEP_SUMMARY"
           (( size < 650 )) || { echo "::error::The image grew to $size MB"; exit 1; }
 
-      # Only after the candidate passed, so no write credential is on the
-      # runner while untested code runs.
+      # Only after the candidate passed. Pull requests from forks get a
+      # read-only token, so they can never push.
       - name: Log in to ghcr.io
         if: needs.plan.outputs.publish == 'true'
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
@@ -206,10 +212,8 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           provenance: false
           sbom: true
-          build-args: |
-            FIRECRAWL_LOCAL_VERSION=${{ needs.plan.outputs.firecrawl }}
-            CHROMIUM_VERSION=${{ needs.plan.outputs[format('chromium_{0}', matrix.arch)] }}
-          labels: org.opencontainers.image.revision=${{ github.sha }}
+          build-args: ${{ env.BUILD_ARGS }}
+          labels: ${{ env.LABELS }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Verify the pushed image and save its digest

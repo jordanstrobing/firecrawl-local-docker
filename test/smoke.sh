@@ -90,3 +90,9 @@ fi
 jq -e '(.data | length == 2) and any(.data[]; .markdown | contains("static-marker-7f3a")) and any(.data[]; .metadata.sourceURL | endswith("/js.html"))' \
   <<<"$result" >/dev/null
 printf 'Passed bounded crawl\n'
+
+fc() { FIRECRAWL_API_URL=$api FIRECRAWL_API_KEY=$FIRECRAWL_LOCAL_TOKEN "$here/../skills/firecrawl-local/scripts/fc.sh" "$@"; }
+fc page "$site/static.html" | grep 'lines, HTTP 200$' >/dev/null
+fc map "$site/static.html" no-such-page | grep ': 0 URLs$' >/dev/null
+fc batch "$site/static.html" "$site/js.html" | grep ': completed, 2 pages, 0 errors$' >/dev/null
+printf "Passed the skill's script\n"

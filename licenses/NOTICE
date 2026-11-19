@@ -4,9 +4,10 @@ Third-party material in this repository and in the published image
 seccomp_profile.json
   From Playwright (https://github.com/microsoft/playwright), file
   utils/docker/seccomp_profile.json at commit
-  ae935a43d9e376e4759548f6b3c6905c7b282333. This image adds chroot
-  to the allowlist for Chromium's namespace sandbox with Docker capabilities
-  dropped. The kernel still checks the capability in the calling namespace.
+  ae935a43d9e376e4759548f6b3c6905c7b282333. Changed here: chroot is
+  allowed, for Chromium's namespace sandbox with Docker capabilities dropped
+  (the kernel still checks the capability in the calling namespace), and the
+  io_uring calls are removed, as in Docker's own default profile.
   Copyright (c) Microsoft Corporation. Licensed under the Apache License 2.0;
   see Apache-2.0.txt in this directory.
 

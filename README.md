@@ -18,12 +18,12 @@ By default nothing goes to Firecrawl, and there's no account, no credits and no 
 
 ### 1. Run the server
 
-On the machine that will host it, such as your computer, a home server or a Raspberry Pi. A machine at home works better than a cloud server: sites block datacenter addresses more often than home connections. You need Docker with Compose, git, openssl and curl, in a Linux, macOS or WSL2 shell. It's tested on Linux with Docker Engine; Docker Desktop should work but isn't tested yet.
+On the machine that will host it, such as your computer, a home server or a Raspberry Pi. A machine at home works better than a cloud server: sites block datacenter addresses more often than home connections. You need Docker with Compose, git, openssl and curl, in a Linux, macOS or WSL2 shell. It's tested on Linux with Docker Engine, including a Raspberry Pi 5; Docker Desktop should work but isn't tested yet.
 
 ```bash
 git clone https://github.com/jordanstrobing/firecrawl-local-docker && cd firecrawl-local-docker
 (umask 077; echo "FIRECRAWL_LOCAL_TOKEN=$(openssl rand -hex 32)" > .env)
-docker compose up -d
+docker compose up -d --wait
 ```
 
 The second line generates the server's password into `.env`. Check that it's running:
@@ -104,14 +104,25 @@ services:
 ## Updating
 
 ```bash
-docker compose pull && docker compose up -d
+git pull && docker compose pull && docker compose up -d
 ```
 
-To update automatically, use an updater such as [Dockhand](https://dockhand.pro) or [What's Up Docker](https://github.com/getwud/wud), and prune old images now and then.
+To update automatically, use an updater such as [Dockhand](https://dockhand.pro) or [What's Up Docker](https://github.com/getwud/wud), and remove old images now and then with `docker image prune`. Updaters only pull the image, so run `git pull` when a [release](https://github.com/jordanstrobing/firecrawl-local-docker/releases) changes `compose.yaml` or `seccomp_profile.json`.
 
 A new image is published within a day of a new Chromium or a Debian update to anything inside it, and three days after a new Firecrawl Local release, so a bad release can be pulled before it reaches you. `latest` is the newest build, `0.1.0` the newest build of that version, and tags like `0.1.0-202611182337` name a single build. To pin or roll back, set `image:` in `compose.override.yaml` to a digest, such as `ghcr.io/jordanstrobing/firecrawl-local-docker@sha256:…`, which no one can change.
 
 Chromium fixes reach Debian, and this image, usually within a few days of Google's release. The [Debian security tracker](https://security-tracker.debian.org/tracker/source-package/chromium) shows the current status.
+
+## Uninstall
+
+In the repository's folder on the server, then on the machines where your agents run:
+
+```bash
+docker compose down --volumes
+tailscale serve --tcp 3002 off   # if you did step 2
+npx add-mcp remove firecrawl-local -g
+npx skills remove firecrawl-local -g
+```
 
 ## Troubleshooting
 

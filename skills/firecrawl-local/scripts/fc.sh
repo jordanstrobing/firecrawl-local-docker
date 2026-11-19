@@ -14,6 +14,10 @@ case "${1:-} $#" in
   *) sed -n '2,9s/^# //p' "$0" >&2; exit 2 ;;
 esac
 : "${FIRECRAWL_API_URL:?set it to the server, such as http://127.0.0.1:3002}" "${FIRECRAWL_API_KEY:?set it to the server token}"
+if [[ $1 == page || $1 == crawl ]] && [[ -n ${3:-} ]] && ! jq -e 'type == "object"' <<< "$3" > /dev/null 2>&1; then
+  echo "OPTIONS must be a JSON object, such as '{\"waitFor\":3000}'" >&2
+  exit 2
+fi
 tmp=${TMPDIR:-/tmp}
 out=$(mktemp -d "${tmp%/}/fc.XXXXXX")
 trap 'rm -f "$out/response.json"' EXIT
@@ -33,13 +37,15 @@ api() { # api ROUTE [JSON]: POST with JSON, else GET. Prints the response; fails
 }
 
 # A page is usable when the site answered without an error, didn't block it,
-# and it has text. Its status line adds any warning, such as a page that needed
+# and it has content. Its status line also marks a short page, which may be a
+# bot check or login wall, and adds any warning, such as a page that needed
 # JavaScript but wasn't rendered.
-problems='def problems: [(.metadata.statusCode // 0 | select(. >= 400) | "HTTP \(.)"),
-  (select(.blocked) | "blocked"), (select((.markdown // "") | test("\\S") | not) | "empty")];
+problems='def text: .markdown // .html // .rawHtml // "";
+def problems: [(.metadata.statusCode // 0 | select(. >= 400) | "HTTP \(.)"), (select(.blocked) | "blocked"),
+  (select((text | test("\\S") | not) and (.links // []) == []) | "empty")];
 def usable: problems == [];
 def status: ["HTTP \(.metadata.statusCode // "?")"] + [problems[] | select(startswith("HTTP") | not)]
-  + [.warning // empty] | join(", ");'
+  + [select(text | test("\\S") and length < 300) | "short"] + [.warning // empty] | join(", ");'
 
 case $1 in
   map)
@@ -50,13 +56,18 @@ case $1 in
     ;;
   page)
     doc=$(api scrape "$(jq -n --arg url "$2" --argjson opts "${3:-null}" '{url: $url, formats: ["markdown"]} + ($opts // {})')" | jq -c '.data')
-    jq -r '.markdown // ""' <<< "$doc" > "$out/page.md"
+    jq -r '.markdown // .html // .rawHtml // ""' <<< "$doc" > "$out/page.md"
     jq -r --arg file "$out/page.md" --argjson lines "$(wc -l < "$out/page.md")" "$problems"'
       "\($file): \($lines) lines, \(status)"
-      + if .metadata.url and .metadata.url != .metadata.sourceURL then ", from \(.metadata.url)" else "" end' <<< "$doc"
-    # Headings outside code blocks, so the outline stays short on very long pages.
+      + if .metadata.url and .metadata.url != .metadata.sourceURL then ", redirected to \(.metadata.url)" else "" end' <<< "$doc"
+    if jq -e '.links' <<< "$doc" > /dev/null; then
+      jq -r '.links[] | .url? // .' <<< "$doc" > "$out/links.txt"
+      echo "$out/links.txt: $(wc -l < "$out/links.txt" | tr -d ' ') links"
+    fi
+    # Headings outside code blocks, without link targets, so the outline stays
+    # short on very long pages.
     awk '/^(```|~~~)/ { code = !code; next }
-      !code && /^#/ && ++n <= 40 { print NR ":" substr($0, 1, 120) }
+      !code && /^#/ && ++n <= 40 { gsub(/\]\([^)]*\)/, "]"); print NR ":" substr($0, 1, 120) }
       END { if (n > 40) print "(" n - 40 " more headings)" }' "$out/page.md"
     jq -e "$problems"' usable' <<< "$doc" > /dev/null
     ;;

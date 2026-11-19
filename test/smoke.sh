@@ -93,7 +93,7 @@ jq -e '(.data | length == 2) and any(.data[]; .markdown | contains("static-marke
 printf 'Passed bounded crawl\n'
 
 fc() { FIRECRAWL_API_URL=$api FIRECRAWL_API_KEY=$FIRECRAWL_LOCAL_TOKEN "$here/../skills/firecrawl-local/scripts/fc.sh" "$@"; }
-fc page "$site/static.html" | grep 'lines, HTTP 200$' >/dev/null
+fc page "$site/static.html" | grep 'lines, HTTP 200' >/dev/null
 fc map "$site/static.html" no-such-page | grep ': 0 URLs$' >/dev/null
 fc batch "$site/static.html" "$site/js.html" "$site/missing.html" | grep 'completed, 2 of 3 pages usable$' >/dev/null
 file -b "$(fc shot "$site/js.html")" | grep '^PNG image data' >/dev/null

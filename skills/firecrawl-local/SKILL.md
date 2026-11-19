@@ -14,7 +14,8 @@ The server's own instructions describe Firecrawl's cloud service. Locally, use `
 ## Which tool
 
 - **A known URL:** `firecrawl_scrape` with `formats: ["markdown"]`. It handles JavaScript-heavy pages and PDFs, which a plain fetch tool can't.
-- **A site, but not the page:** `firecrawl_map` lists the site's URLs. Pick the one page you need and scrape only that, instead of scraping several pages to find it.
+- **A site, but not the page:** `firecrawl_map` with a `search` term (for example `"auth"`) lists matching URLs on the site. Pick the one page you need and scrape only that, instead of scraping several pages to find it.
+- **Where a page leads:** `firecrawl_scrape` with `formats: ["links"]` returns only its links, a fraction of the page's size.
 - **A section of a site:** `firecrawl_crawl` with a small `limit` (5 to 10) and `includePaths` for the section, then `firecrawl_check_crawl_status` until it completes.
 - **APIs, JSON endpoints and raw files** (for example `raw.githubusercontent.com`): use `curl` or a plain fetch. Firecrawl is for web pages.
 - **Finding pages:** use your own web search, then read the results with Firecrawl.
@@ -25,7 +26,7 @@ The server's own instructions describe Firecrawl's cloud service. Locally, use `
 - For a slow page that renders late, add `waitFor` in milliseconds.
 - AI extraction (`json`, `summary` formats) and browser `actions` aren't available locally either.
 
-## Long pages: save to a file
+## Long pages and screenshots: save to a file
 
 If `FIRECRAWL_API_URL` and `FIRECRAWL_API_KEY` are set in your shell, fetch long pages (full documentation pages, READMEs, long articles) to a file and read only the part you need, instead of loading the whole page into context:
 
@@ -37,7 +38,17 @@ curl -sS "$FIRECRAWL_API_URL/v2/scrape" -H "Authorization: Bearer $FIRECRAWL_API
   && grep -n '^#' "$page"   # the page's outline with line numbers
 ```
 
-Then read just the lines of the section you need from `$page`. If the command fails, it prints the reason instead. If the variables aren't set or your shell can't reach the network (Codex's sandbox blocks it by default), use the MCP tools.
+Then read just the lines of the section you need from `$page`. If the command fails, it prints the reason instead. To check how a page looks, save a screenshot and view the image file, rather than taking the screenshot through MCP, which returns a large base64 string:
+
+```bash
+shot=$(mktemp).png
+curl -sS "$FIRECRAWL_API_URL/v2/scrape" -H "Authorization: Bearer $FIRECRAWL_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"url":"https://example.com","formats":["screenshot"]}' \
+  | jq -er '.data.screenshot // error(.error // "no screenshot")' | sed 's/^data:image\/png;base64,//' | base64 -d > "$shot" \
+  && echo "$shot"
+```
+
+If the variables aren't set or your shell can't reach the network (Codex's sandbox blocks it by default), use the MCP tools.
 
 ## Errors
 

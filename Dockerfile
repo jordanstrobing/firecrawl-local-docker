@@ -36,6 +36,8 @@ ARG CHROMIUM_VERSION
 # through it, systemd (about 155 MB more) and uses twice the memory per page.
 # Only Chromium is pinned, so every rebuild picks up Debian's security fixes.
 # curl is for the health check; tini reaps Chromium's orphaned processes.
+# The fonts let screenshots show non-Latin scripts, CJK and emoji instead of
+# empty boxes (about 70 MB); page text doesn't depend on them.
 # Skip Mesa's GPU driver, which pulls in LLVM and Z3, and Vulkan's debug
 # layer (about 200 MB together): libgbm only loads the driver when a GPU
 # device exists, which this container never has.
@@ -47,7 +49,8 @@ RUN printf 'path-exclude=%s\n' '/usr/lib/*/libLLVM*' '/usr/lib/*/libgallium*' '/
  && apt-get install -y --no-install-recommends \
       "chromium-headless-shell${CHROMIUM_VERSION:+=$CHROMIUM_VERSION}" \
       "chromium-common${CHROMIUM_VERSION:+=$CHROMIUM_VERSION}" \
-      ca-certificates curl fonts-liberation tini \
+      ca-certificates curl tini \
+      fonts-liberation fonts-noto-core fonts-noto-color-emoji fonts-wqy-zenhei \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 firecrawl \
  && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin firecrawl

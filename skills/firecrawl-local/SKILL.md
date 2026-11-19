@@ -9,7 +9,7 @@ compatibility: Needs the firecrawl-local MCP server, connected to a Firecrawl Lo
 
 The `firecrawl-local` MCP server fetches pages on the user's own server and returns clean markdown of the main content. With its default settings nothing is sent to a third party, and there are no credits or rate limits.
 
-The server's own instructions describe Firecrawl's cloud service. Locally, use `firecrawl_scrape`, `firecrawl_map`, `firecrawl_crawl` and `firecrawl_check_crawl_status`. The other Firecrawl tools (search, agent, Alexandria, research, developer and government search) only work if the server's owner has enabled Firecrawl Cloud; if one returns an error, don't retry it.
+The server's own instructions describe Firecrawl's cloud service. Locally, use `firecrawl_scrape`, `firecrawl_map`, `firecrawl_crawl` and `firecrawl_check_crawl_status`. The other Firecrawl tools (search, agent, Alexandria, research, developer and government search) only work if the server's owner has enabled Firecrawl Cloud, and the `json` and `summary` formats and browser `actions` aren't available locally at all. If one returns an error, don't retry it.
 
 ## Which tool
 
@@ -24,7 +24,6 @@ The server's own instructions describe Firecrawl's cloud service. Locally, use `
 
 - Scrapes return only the main content by default. To narrow further, pass `includeTags` (such as `["article"]` or `["main"]`) or `excludeTags`.
 - If a page comes back with its main content missing, retry once with `waitFor` (milliseconds, for example `3000`).
-- AI extraction (`json`, `summary` formats) and browser `actions` aren't available locally either.
 
 ## Long pages and screenshots: save to a file
 

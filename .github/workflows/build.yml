@@ -13,12 +13,8 @@ on:
     branches: [main]
     paths:
       - Dockerfile
-      - compose.yaml
       - .dockerignore
-      - LICENSE
-      - licenses/**
-      - seccomp_profile.json
-      - test/**
+      - licenses/AGPL-3.0.txt
       - .github/workflows/build.yml
   pull_request:
 
@@ -35,13 +31,11 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    permissions:
-      packages: read
+    permissions: {}
     outputs:
       firecrawl: ${{ steps.versions.outputs.firecrawl }}
       chromium_amd64: ${{ steps.versions.outputs.chromium_amd64 }}
       chromium_arm64: ${{ steps.versions.outputs.chromium_arm64 }}
-      created: ${{ steps.versions.outputs.created }}
       stamp: ${{ steps.versions.outputs.stamp }}
       build: ${{ steps.decide.outputs.build }}
       publish: ${{ steps.decide.outputs.publish }}
@@ -94,18 +88,9 @@ jobs:
             echo "firecrawl=$firecrawl"
             echo "chromium_amd64=$amd64"
             echo "chromium_arm64=$arm64"
-            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "stamp=$(date -u +%Y%m%d%H%M)"
           } >> "$GITHUB_OUTPUT"
           echo "Firecrawl Local $firecrawl · Chromium amd64 $amd64, arm64 $arm64"
-
-      - name: Log in to ghcr.io
-        if: github.ref == 'refs/heads/main' && github.event_name == 'schedule'
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
 
       # Lets the update check below run the arm64 image too.
       - name: Set up QEMU
@@ -138,13 +123,13 @@ jobs:
               # on either architecture.
               updates=$(for platform in linux/amd64 linux/arm64; do
                   docker run --rm --pull always --platform "$platform" --user 0 --entrypoint sh "$IMAGE:latest" -c \
-                    'apt-get update -qq >/dev/null && apt list --upgradable 2>/dev/null'
+                    'apt-get update -qq >/dev/null && apt list --upgradable 2>/dev/null' || exit 1
                 done | awk -F/ '/\// { print $1 }' | sort -u | paste -sd ' ' -)
               if [[ -z "$updates" ]]; then build=false; fi
               echo "Debian updates: ${updates:-none}" >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
-          if [[ "$build" == true && "$EVENT" != pull_request && "$GITHUB_REF" == refs/heads/main ]]; then
+          if [[ "$build" == true && "$GITHUB_REF" == refs/heads/main ]]; then
             publish=true
           fi
           echo "build=$build" >> "$GITHUB_OUTPUT"
@@ -155,7 +140,6 @@ jobs:
     needs: plan
     if: needs.plan.outputs.build == 'true'
     strategy:
-      fail-fast: true
       matrix:
         include:
           - arch: amd64
@@ -185,19 +169,21 @@ jobs:
           load: true
           no-cache-filters: runtime
           provenance: false
-          sbom: false
           build-args: |
             FIRECRAWL_LOCAL_VERSION=${{ needs.plan.outputs.firecrawl }}
             CHROMIUM_VERSION=${{ needs.plan.outputs[format('chromium_{0}', matrix.arch)] }}
-          labels: |
-            org.opencontainers.image.created=${{ needs.plan.outputs.created }}
-            org.opencontainers.image.revision=${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
           tags: firecrawl-local:candidate
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
 
       - name: Smoke test
-        run: test/smoke.sh firecrawl-local:candidate
+        run: |
+          test/smoke.sh firecrawl-local:candidate
+          # Catch accidental bloat, such as a package pulling in a desktop stack.
+          size=$(( $(docker image inspect firecrawl-local:candidate --format '{{.Size}}') / 1000000 ))
+          echo "Image size (${{ matrix.arch }}): $size MB" >> "$GITHUB_STEP_SUMMARY"
+          (( size < 650 )) || { echo "::error::The image grew to $size MB"; exit 1; }
 
       # Only after the candidate passed, so no write credential is on the
       # runner while untested code runs.
@@ -223,9 +209,7 @@ jobs:
           build-args: |
             FIRECRAWL_LOCAL_VERSION=${{ needs.plan.outputs.firecrawl }}
             CHROMIUM_VERSION=${{ needs.plan.outputs[format('chromium_{0}', matrix.arch)] }}
-          labels: |
-            org.opencontainers.image.created=${{ needs.plan.outputs.created }}
-            org.opencontainers.image.revision=${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Verify the pushed image and save its digest
@@ -270,8 +254,6 @@ jobs:
           path: ${{ runner.temp }}/digests
           pattern: digest-*
           merge-multiple: true
-
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:

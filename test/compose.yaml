@@ -9,11 +9,7 @@ services:
   fixture:
     image: python:3.13-alpine
     command: [python, -m, http.server, "8000", --directory, /site]
-    volumes:
-      - type: bind
-        source: ./test/site
-        target: /site
-        read_only: true
+    volumes: [./test/site:/site:ro]
     networks:
       default:
         aliases: [fixture.test]

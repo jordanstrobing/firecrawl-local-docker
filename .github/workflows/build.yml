@@ -123,7 +123,7 @@ jobs:
               # on either architecture.
               updates=$(for platform in linux/amd64 linux/arm64; do
                   docker run --rm --pull always --platform "$platform" --user 0 --entrypoint sh "$IMAGE:latest" -c \
-                    'apt-get update -qq >/dev/null && apt list --upgradable 2>/dev/null'
+                    'apt-get update -qq >/dev/null && apt list --upgradable 2>/dev/null' || exit 1
                 done | awk -F/ '/\// { print $1 }' | sort -u | paste -sd ' ' -)
               if [[ -z "$updates" ]]; then build=false; fi
               echo "Debian updates: ${updates:-none}" >> "$GITHUB_STEP_SUMMARY"
@@ -178,7 +178,12 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
 
       - name: Smoke test
-        run: test/smoke.sh firecrawl-local:candidate
+        run: |
+          test/smoke.sh firecrawl-local:candidate
+          # Catch accidental bloat, such as a package pulling in a desktop stack.
+          size=$(( $(docker image inspect firecrawl-local:candidate --format '{{.Size}}') / 1000000 ))
+          echo "Image size (${{ matrix.arch }}): $size MB" >> "$GITHUB_STEP_SUMMARY"
+          (( size < 650 )) || { echo "::error::The image grew to $size MB"; exit 1; }
 
       # Only after the candidate passed, so no write credential is on the
       # runner while untested code runs.

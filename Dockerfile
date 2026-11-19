@@ -24,7 +24,8 @@ ARG FIRECRAWL_LOCAL_VERSION
 ARG CHROMIUM_VERSION
 # Chromium's headless shell: Debian's full chromium package drags in GTK and,
 # through it, systemd (about 155 MB more) and uses twice the memory per page.
-# It pulls in the matching chromium-common. Only Chromium is pinned, so every
+# Both Chromium packages are pinned together: apt only installs the newest
+# chromium-common, so an older pin would fail. Nothing else is pinned, so every
 # rebuild picks up Debian's security fixes.
 # curl is for the health check; tini reaps Chromium's orphaned processes.
 # The fonts let screenshots show non-Latin scripts, CJK and emoji instead of
@@ -40,6 +41,7 @@ RUN printf 'path-exclude=%s\n' '/usr/lib/*/libLLVM*' '/usr/lib/*/libgallium*' '/
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
       "chromium-headless-shell${CHROMIUM_VERSION:+=$CHROMIUM_VERSION}" \
+      "chromium-common${CHROMIUM_VERSION:+=$CHROMIUM_VERSION}" \
       ca-certificates curl tini \
       fonts-liberation fonts-noto-core fonts-noto-color-emoji fonts-wqy-zenhei \
  && rm -rf /var/lib/apt/lists/* \
@@ -49,6 +51,12 @@ RUN printf 'path-exclude=%s\n' '/usr/lib/*/libLLVM*' '/usr/lib/*/libgallium*' '/
 COPY --from=build /out/bin/firecrawl-local /usr/local/bin/firecrawl-local
 COPY --from=build /out/share/doc/firecrawl-local/ /usr/share/doc/firecrawl-local/
 COPY licenses/AGPL-3.0.txt /usr/share/doc/firecrawl-local/LICENSE
+# Web pages run in Chromium, so start it without the server's token and API key.
+COPY --chmod=755 <<'EOF' /usr/local/bin/chromium
+#!/bin/sh
+unset FIRECRAWL_LOCAL_TOKEN FIRECRAWL_API_KEY
+exec /usr/lib/chromium/chromium-headless-shell "$@"
+EOF
 
 LABEL org.opencontainers.image.title="Firecrawl Local (unofficial image)" \
       org.opencontainers.image.description="Firecrawl Local with Chromium. Not affiliated with Firecrawl." \
@@ -56,14 +64,14 @@ LABEL org.opencontainers.image.title="Firecrawl Local (unofficial image)" \
       org.opencontainers.image.version="${FIRECRAWL_LOCAL_VERSION}" \
       io.github.jordanstrobing.firecrawl-local-docker.chromium="${CHROMIUM_VERSION}"
 
-# Firecrawl Local only looks for chromium/google-chrome. Point it at the real
-# binary, not /usr/bin's sh wrapper, so signals reach Chromium directly.
-ENV FIRECRAWL_CHROME_PATH=/usr/lib/chromium/chromium-headless-shell
+# Firecrawl Local doesn't look for the headless shell by name.
+ENV FIRECRAWL_CHROME_PATH=/usr/local/bin/chromium
 USER 10001:10001
 WORKDIR /home/firecrawl
 EXPOSE 3002
-# /health needs the token like every other route.
+# /health needs the token like every other route. It goes through stdin so it
+# doesn't show in the process list.
 HEALTHCHECK --timeout=5s --start-period=15s \
-  CMD ["sh", "-c", "curl -fsS -o /dev/null -H \"Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN\" http://127.0.0.1:3002/health"]
+  CMD ["sh", "-c", "printf 'Authorization: Bearer %s\\n' \"$FIRECRAWL_LOCAL_TOKEN\" | curl -fsS -o /dev/null -H @- http://127.0.0.1:3002/health"]
 ENTRYPOINT ["/usr/bin/tini", "--", "firecrawl-local"]
 CMD ["serve", "--host", "0.0.0.0"]

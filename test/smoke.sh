@@ -7,6 +7,7 @@ export SMOKE_IMAGE=${1:?usage: test/smoke.sh IMAGE}
 project="firecrawl-smoke-$$-$RANDOM"
 export FIRECRAWL_LOCAL_TOKEN=smoke-test-token
 export FIRECRAWL_HOSTNAME=firecrawl.test
+export FIRECRAWL_API_KEY=
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 compose=(docker compose -p "$project" --env-file /dev/null -f "$here/../compose.yaml" -f "$here/compose.yaml")
 
@@ -60,7 +61,9 @@ expect_status 403 -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" -H 'Host: un
 request health -H 'Host: firecrawl.test:3002' | jq -e '.status == "ok" and .engine == "firecrawl-local" and (.version | length > 0)' >/dev/null
 expect_status 501 -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" \
   -H 'Content-Type: application/json' -d '{"query":"example"}' "$api/v2/search"
-printf 'Passed authentication, Host allowlist, container health and cloud-off mode\n'
+expect_status 403 -H "Authorization: Bearer $FIRECRAWL_LOCAL_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"url":"http://169.254.169.254/latest/meta-data/"}' "$api/v2/scrape"
+printf 'Passed authentication, Host allowlist, container health, cloud-off mode and metadata blocking\n'
 
 request v2/scrape -d "{\"url\":\"$site/static.html\",\"formats\":[\"markdown\"]}" \
   | jq -e '.success and (.data.markdown | contains("static-marker-7f3a"))' >/dev/null

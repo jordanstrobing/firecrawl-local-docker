@@ -34,6 +34,11 @@ jobs:
       - name: Smoke test (shellcheck)
         run: shellcheck --severity=style test/*.sh
 
+      - name: Agent Skill (skills-ref, the Agent Skills reference validator)
+        run: >-
+          pipx run --spec "git+https://github.com/agentskills/agentskills@83021e2be457a9b6679148719c1f6074f0ad975e#subdirectory=skills-ref"
+          skills-ref validate skills/firecrawl-local
+
       - name: Compose file and seccomp profile
         run: |
           FIRECRAWL_LOCAL_TOKEN=lint docker compose -f compose.yaml config --quiet

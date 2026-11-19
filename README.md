@@ -18,7 +18,7 @@ By default nothing goes to Firecrawl, and there's no account, no credits and no 
 
 ### 1. Run the server
 
-On the machine that will host it, such as your computer, a home server or a Raspberry Pi. You need Docker with Compose, git, openssl and curl, in a Linux, macOS or WSL2 shell:
+On the machine that will host it, such as your computer, a home server or a Raspberry Pi. You need Docker with Compose, git, openssl and curl, in a Linux, macOS or WSL2 shell. It's tested on Linux with Docker Engine; Docker Desktop should work but isn't tested yet.
 
 ```bash
 git clone https://github.com/jordanstrobing/firecrawl-local-docker && cd firecrawl-local-docker

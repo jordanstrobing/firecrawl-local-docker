@@ -2,15 +2,16 @@ name: build
 
 # Daily: rebuild when crates.io has a new Firecrawl Local, Debian has a new
 # Chromium, or Debian has updates for any package in the published image.
-# Pushes to main and manual runs on main always rebuild and publish.
-# Pull requests and runs on other branches build and test without publishing.
+# Pushes to main that change the image, and manual runs on main, rebuild and
+# publish. Every pull request builds and tests without publishing, so the
+# build is always there to be a required check.
 on:
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
   push:
     branches: [main]
-    paths: &build-inputs
+    paths:
       - Dockerfile
       - compose.yaml
       - .dockerignore
@@ -20,7 +21,6 @@ on:
       - test/**
       - .github/workflows/build.yml
   pull_request:
-    paths: *build-inputs
 
 permissions: {}
 

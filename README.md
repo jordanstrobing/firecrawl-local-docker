@@ -124,7 +124,7 @@ Chromium fixes reach Debian, and this image, usually within a few days of Google
 
 ## Resources
 
-On a Raspberry Pi 5, the server idles at about 5 MB of memory and stays under 10 MB for ordinary pages. JavaScript pages and screenshots start Chromium: about 110 MB for one page and 140 MB for two at once. The image is about 200 MB to download and 470 MB on disk. Compose caps the server at 2 GiB of memory with no swap.
+On a Raspberry Pi 5, the server idles at about 5 MB of memory and stays under 10 MB for ordinary pages. JavaScript pages and screenshots start Chromium: about 110 MB for one page and 140 MB for two at once. The image is about 240 MB to download and 520 MB on disk. Compose caps the server at 2 GiB of memory with no swap.
 
 ## Security
 

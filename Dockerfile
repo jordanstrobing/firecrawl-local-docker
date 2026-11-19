@@ -37,7 +37,7 @@ ARG CHROMIUM_VERSION
 RUN printf 'path-exclude=%s\n' '/usr/lib/*/libLLVM*' '/usr/lib/*/libgallium*' '/usr/lib/*/libz3.so*' \
       '/usr/lib/chromium/libVk*' '/usr/lib/chromium/resources.pak' '/usr/lib/chromium/chrome_*_percent.pak' \
       '/usr/lib/chromium/locales/*' > /etc/dpkg/dpkg.cfg.d/headless \
- && apt-get update \
+ && apt-get --error-on=any update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
       "chromium-headless-shell${CHROMIUM_VERSION:+=$CHROMIUM_VERSION}" \

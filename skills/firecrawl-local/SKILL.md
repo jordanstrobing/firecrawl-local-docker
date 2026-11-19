@@ -16,14 +16,14 @@ The server's own instructions describe Firecrawl's cloud service. Locally, use `
 - **A known URL:** `firecrawl_scrape` with `formats: ["markdown"]`. It handles JavaScript-heavy pages and PDFs, which a plain fetch tool can't.
 - **A site, but not the page:** `firecrawl_map` with a `search` term (for example `"auth"`) lists matching URLs on the site. Pick the one page you need and scrape only that, instead of scraping several pages to find it.
 - **Where a page leads:** `firecrawl_scrape` with `formats: ["links"]` returns only its links, a fraction of the page's size.
-- **A section of a site:** `firecrawl_crawl` with a small `limit` (5 to 10) and `includePaths` for the section, then `firecrawl_check_crawl_status` until it completes.
+- **A section of a site:** `firecrawl_crawl` with a small `limit` (5 to 10) and `includePaths` for the section, then `firecrawl_check_crawl_status` with the crawl's `id` until it completes.
 - **APIs, JSON endpoints and raw files** (for example `raw.githubusercontent.com`): use `curl` or a plain fetch. Firecrawl is for web pages.
 - **Finding pages:** use your own web search, then read the results with Firecrawl.
 
 ## Keep output small
 
 - Scrapes return only the main content by default. To narrow further, pass `includeTags` (such as `["article"]` or `["main"]`) or `excludeTags`.
-- For a slow page that renders late, add `waitFor` in milliseconds.
+- If a page comes back with its main content missing, retry once with `waitFor` (milliseconds, for example `3000`).
 - AI extraction (`json`, `summary` formats) and browser `actions` aren't available locally either.
 
 ## Long pages and screenshots: save to a file

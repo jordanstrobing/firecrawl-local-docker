@@ -38,7 +38,7 @@ It should answer `{"status":"ok",…}`.
 
 Skip this if your agents run on the same machine as the server.
 
-The server only listens on `127.0.0.1`. With [Tailscale](https://tailscale.com), forward it to your tailnet and tell the server the name your devices will use:
+The server only listens on `127.0.0.1`. With [Tailscale](https://tailscale.com) on the server and your devices, in the same tailnet, forward the port to the tailnet and tell the server its name, which `tailscale status` shows:
 
 ```bash
 tailscale serve --bg --tcp 3002 tcp://127.0.0.1:3002
@@ -46,11 +46,11 @@ echo "FIRECRAWL_HOSTNAME=myserver" >> .env   # this machine's Tailscale name
 docker compose up -d
 ```
 
-Only your own devices can connect, and it keeps working after a reboot. Without Tailscale, see `FIRECRAWL_BIND_ADDRESS` under [Configuration](#configuration).
+Only devices your tailnet allows can connect, and it keeps working after a reboot. To check, run the health check above from another device, with `http://myserver:3002` instead of `http://127.0.0.1:3002`. Without Tailscale, see `FIRECRAWL_BIND_ADDRESS` under [Configuration](#configuration).
 
 ### 3. Connect your agents
 
-On the machine where your agents run, with Node.js 22 or newer:
+On the machine where your agents run, with Node.js 22 or newer and your agents (such as Claude Code or Codex) already installed:
 
 ```bash
 npx add-mcp firecrawl-mcp --name firecrawl-local -g --env 'FIRECRAWL_API_URL=${FIRECRAWL_API_URL}' --env 'FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}'
@@ -62,7 +62,7 @@ Both commands ask which agents to set up: Claude Code, Codex, OpenCode, Cursor a
 - The first connects your agents to the server. The `${…}` placeholders make it ask for the values: enter the URL (`http://127.0.0.1:3002`, or `http://myserver:3002` from step 2) and the token from the server's `.env`.
 - The second installs a [skill](skills/firecrawl-local/SKILL.md) that tells agents when to use Firecrawl rather than their built-in fetch tool, and how to keep its output small.
 
-Start a new agent session and ask it to read a page.
+Start a new agent session and ask, for example, *Read https://example.com with Firecrawl and summarize it.*
 
 **Optional:**
 

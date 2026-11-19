@@ -4,7 +4,7 @@
 
 Private web scraping for AI agents like Claude Code and Codex, on your own hardware.
 
-[Firecrawl Local](https://docs.firecrawl.dev/quickstarts/firecrawl-local) is Firecrawl's open-source scraper: it turns web pages, PDFs and documents into clean markdown with the same code as Firecrawl's cloud service. This project packages it with a headless Chromium for JavaScript pages, as a locked-down Docker image for `amd64` and `arm64` that is rebuilt automatically whenever any part of it has an update. Thanks to the Firecrawl team for open-sourcing it.
+[Firecrawl Local](https://docs.firecrawl.dev/quickstarts/firecrawl-local) is Firecrawl's open-source scraper: it turns web pages, PDFs and documents into clean markdown with the same code as Firecrawl's cloud service. This project packages it with a headless Chromium for JavaScript pages, as a locked-down Docker image for `amd64` and `arm64`. Thanks to the Firecrawl team for open-sourcing it.
 
 ## How it works
 
@@ -12,13 +12,13 @@ Private web scraping for AI agents like Claude Code and Codex, on your own hardw
 2. It sends the URLs it wants to read to your Firecrawl Local server.
 3. The server fetches and cleans them on your hardware and returns markdown.
 
-Nothing goes to Firecrawl, and there's no account, no credits and no rate limit.
+By default nothing goes to Firecrawl, and there's no account, no credits and no rate limit.
 
 ## Setup
 
 ### 1. Run the server
 
-On the machine that will host it, such as your computer, a home server or a Raspberry Pi, with Docker, git and openssl:
+On the machine that will host it, such as your computer, a home server or a Raspberry Pi. You need Docker with Compose, git, openssl and curl, in a Linux, macOS or WSL2 shell. It's tested on Linux with Docker Engine; Docker Desktop should work but isn't tested yet.
 
 ```bash
 git clone https://github.com/jordanstrobing/firecrawl-local-docker && cd firecrawl-local-docker
@@ -57,12 +57,12 @@ npx add-mcp firecrawl-mcp --name firecrawl-local -g --env 'FIRECRAWL_API_URL=${F
 npx skills add jordanstrobing/firecrawl-local-docker -g
 ```
 
-Both commands ask which agents to set up: Claude Code, Codex, OpenCode, Cursor and [more](https://github.com/neon-solutions/add-mcp#supported-agents).
+Both commands ask which agents to set up: Claude Code, Codex, OpenCode, Cursor and [more](https://github.com/neon-solutions/add-mcp#supported-agents). They use two open standards, [MCP](https://modelcontextprotocol.io) and [Agent Skills](https://agentskills.io), both governed by the Linux Foundation's [Agentic AI Foundation](https://aaif.io).
 
-- The first connects them to the server. When it asks, enter the URL (`http://127.0.0.1:3002`, or `http://myserver:3002` from step 2) and the token from the server's `.env`.
+- The first connects your agents to the server. The `${…}` placeholders make it ask for the values: enter the URL (`http://127.0.0.1:3002`, or `http://myserver:3002` from step 2) and the token from the server's `.env`.
 - The second installs a [skill](skills/firecrawl-local/SKILL.md) that tells agents when to use Firecrawl rather than their built-in fetch tool, and how to keep its output small.
 
-That's it: ask your agent to read a page.
+Start a new agent session and ask it to read a page.
 
 **Optional:**
 
@@ -87,10 +87,10 @@ Set these in the server's `.env`, then run `docker compose up -d` again.
 | Variable | Default | |
 | --- | --- | --- |
 | `FIRECRAWL_LOCAL_TOKEN` | required | The password every request must send. |
-| `FIRECRAWL_HOSTNAME` | `localhost` | The name your devices use for the server. Requests to any other name are refused. |
+| `FIRECRAWL_HOSTNAME` | `localhost` | The name your devices use for the server. Requests to any other name are refused; `localhost` and `127.0.0.1` always work. |
 | `FIRECRAWL_BIND_ADDRESS` | `127.0.0.1` | The address to listen on, if you don't use `tailscale serve`. It must exist when Docker starts, so after a reboot its network has to come up before Docker. |
 | `FIRECRAWL_CLOUD` | `off` | `search` sends web searches to Firecrawl Cloud; `auto` also sends Alexandria requests and pages that block you. |
-| `FIRECRAWL_API_KEY` | | Your Firecrawl key, for those cloud features. |
+| `FIRECRAWL_API_KEY` | | Your Firecrawl key, for those cloud features. Not the same as the `FIRECRAWL_API_KEY` your agents use, which is this server's token. |
 
 For [other Firecrawl Local settings](https://docs.firecrawl.dev/quickstarts/firecrawl-local#configuration), create `compose.override.yaml` next to `compose.yaml`. Compose merges it in automatically:
 
@@ -129,7 +129,7 @@ On a Raspberry Pi 5, the server idles at about 5 MB of memory and stays under 10
 
 - **Keep it private.** Never publish the port to the internet; use `tailscale serve` or another private network.
 - **Chromium keeps its sandbox.** [`seccomp_profile.json`](seccomp_profile.json) is Playwright's profile plus `chroot` inside Chromium's sandbox. The container runs read-only, as a non-root user, with no capabilities, and the tests check that nothing in it can `chroot` outside the sandbox.
-- **Your network is off limits.** The server refuses to fetch localhost and private-network addresses unless you set `FIRECRAWL_LOCAL_ALLOW_PRIVATE`, and always refuses link-local and cloud-metadata addresses, including after redirects.
+- **Your network is off limits.** The server refuses to fetch localhost and private-network addresses unless you add `FIRECRAWL_LOCAL_ALLOW_PRIVATE: "true"` to `compose.override.yaml`, and always refuses link-local and cloud-metadata addresses, including after redirects.
 
 Report vulnerabilities in the image privately, with **Report a vulnerability** on this repository's Security tab. Report vulnerabilities in Firecrawl Local itself to Firecrawl at help@firecrawl.com.
 
@@ -150,6 +150,6 @@ test/smoke.sh firecrawl-local
 
 ## License
 
-The packaging in this repository is [MIT](LICENSE). The image also contains Firecrawl Local under the [AGPL-3.0](licenses/AGPL-3.0.txt), with the exact source and every Rust dependency's license at `/usr/share/doc/firecrawl-local/`; Chromium and Debian packages under their own licenses at `/usr/share/doc/<package>/copyright`; and Playwright's seccomp profile under the [Apache-2.0](licenses/Apache-2.0.txt) license. See [NOTICE](licenses/NOTICE).
+The packaging in this repository is [MIT](LICENSE), and `seccomp_profile.json` is Playwright's, under the [Apache-2.0](licenses/Apache-2.0.txt) license. The image contains Firecrawl Local under the [AGPL-3.0](licenses/AGPL-3.0.txt), with the exact source and every Rust dependency's license at `/usr/share/doc/firecrawl-local/`, and Chromium and Debian packages under their own licenses at `/usr/share/doc/<package>/copyright`. See [NOTICE](licenses/NOTICE).
 
-This image is unofficial and not affiliated with Firecrawl. Report problems with the image here, and problems with Firecrawl Local [upstream](https://github.com/firecrawl/firecrawl/issues).
+This project is unofficial and not affiliated with Firecrawl. Report problems with Firecrawl Local itself [upstream](https://github.com/firecrawl/firecrawl/issues).

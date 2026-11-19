@@ -82,6 +82,10 @@ for ((attempt = 0; attempt < 30; attempt++)); do
   if [[ "$status" != scraping ]]; then break; fi
   sleep 1
 done
+if [[ "$status" != completed ]]; then
+  printf 'Crawl %s ended with status %s\n' "$job" "$status" >&2
+  exit 1
+fi
 jq -e '.status == "completed" and (.data | length == 2) and any(.data[]; .markdown | contains("static-marker-7f3a")) and any(.data[]; .metadata.sourceURL | endswith("/js.html"))' \
   <<<"$result" >/dev/null
 printf 'Passed bounded crawl\n'

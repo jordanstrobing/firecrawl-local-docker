@@ -18,18 +18,18 @@ By default nothing goes to Firecrawl, and there's no account, no credits and no 
 
 ### 1. Run the server
 
-On the machine that will host it, such as your computer, a home server or a Raspberry Pi. A machine at home works better than a cloud server: sites block datacenter addresses more often than home connections. You need Docker with Compose, git, openssl and curl, in a Linux, macOS or WSL2 shell. It's tested on Linux with Docker Engine, including a Raspberry Pi 5; Docker Desktop should work but isn't tested yet.
+On the machine that will host it, such as your computer, a home server or a Raspberry Pi. A machine at home works better than a cloud server: sites block datacenter addresses more often than home connections. You need Docker 28 or newer with Compose (older versions can let other devices on your network reach ports published on `127.0.0.1`), git, openssl and curl, in a Linux, macOS or WSL2 shell. It's tested on Linux with Docker Engine, including a Raspberry Pi 5; Docker Desktop should work but isn't tested yet.
 
 ```bash
 git clone https://github.com/jordanstrobing/firecrawl-local-docker && cd firecrawl-local-docker
-(umask 077; echo "FIRECRAWL_LOCAL_TOKEN=$(openssl rand -hex 32)" > .env)
+[ -f .env ] || (umask 077; echo "FIRECRAWL_LOCAL_TOKEN=$(openssl rand -hex 32)" > .env)
 docker compose up -d --wait
 ```
 
-The second line generates the server's password into `.env`. Check that it's running:
+The second line generates the server's password into `.env`, unless it already exists. Check that it's running:
 
 ```bash
-curl -H "Authorization: Bearer $(sed -n 's/^FIRECRAWL_LOCAL_TOKEN=//p' .env)" http://127.0.0.1:3002/health
+sed -n 's/^FIRECRAWL_LOCAL_TOKEN=/Authorization: Bearer /p' .env | curl -H @- http://127.0.0.1:3002/health
 ```
 
 It should answer `{"status":"ok",…}`.
@@ -46,7 +46,7 @@ echo "FIRECRAWL_HOSTNAME=myserver" >> .env   # this machine's Tailscale name
 docker compose up -d
 ```
 
-Only devices your tailnet allows can connect, and it keeps working after a reboot. To check, run the health check above from another device, with `http://myserver:3002` instead of `http://127.0.0.1:3002`. Without Tailscale, see `FIRECRAWL_BIND_ADDRESS` under [Configuration](#configuration).
+Only devices your tailnet allows can connect, and it keeps working after a reboot. To check, run `curl -H 'Authorization: Bearer <token>' http://myserver:3002/health` from another device, with the token from the server's `.env`. Without Tailscale, see `FIRECRAWL_BIND_ADDRESS` under [Configuration](#configuration).
 
 ### 3. Connect your agents
 

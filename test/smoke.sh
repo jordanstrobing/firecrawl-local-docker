@@ -69,11 +69,12 @@ request v2/scrape -d "{\"url\":\"$site/static.html\",\"formats\":[\"markdown\"]}
   | jq -e '.success and (.data.markdown | contains("static-marker-7f3a"))' >/dev/null
 request v2/scrape -d "{\"url\":\"$site/document.pdf\",\"formats\":[\"markdown\"]}" \
   | jq -e '.success and (.data.markdown | contains("pdf-marker-4b2d"))' >/dev/null
-request v2/scrape -d "{\"url\":\"$site/js.html\",\"formats\":[\"markdown\",\"screenshot\"]}" \
-  | jq -e '.success and (.data.markdown | contains("js-marker-c91e")) and (.data.screenshot | startswith("data:image/png;base64,iVBORw0KGgo"))' >/dev/null
+# Markdown only, so the server has to notice on its own that the page needs Chromium.
+request v2/scrape -d "{\"url\":\"$site/js.html\",\"formats\":[\"markdown\"]}" \
+  | jq -e '.success and (.data.markdown | contains("js-marker-c91e"))' >/dev/null
 request v2/map -d "{\"url\":\"$site/static.html\",\"sitemap\":\"skip\"}" \
   | jq -e '.success and any(.links[]; .url | endswith("/js.html"))' >/dev/null
-printf 'Passed static HTML, PDF, JavaScript, PNG screenshot and map\n'
+printf 'Passed static HTML, PDF, JavaScript and map\n'
 
 job=$(request v2/crawl -d "{\"url\":\"$site/static.html\",\"limit\":2,\"maxDiscoveryDepth\":1,\"crawlEntireDomain\":true,\"sitemap\":\"skip\"}" \
   | jq -er 'select(.success).id')
@@ -94,5 +95,10 @@ printf 'Passed bounded crawl\n'
 fc() { FIRECRAWL_API_URL=$api FIRECRAWL_API_KEY=$FIRECRAWL_LOCAL_TOKEN "$here/../skills/firecrawl-local/scripts/fc.sh" "$@"; }
 fc page "$site/static.html" | grep 'lines, HTTP 200$' >/dev/null
 fc map "$site/static.html" no-such-page | grep ': 0 URLs$' >/dev/null
-fc batch "$site/static.html" "$site/js.html" | grep ': completed, 2 pages, 0 errors$' >/dev/null
-printf "Passed the skill's script\n"
+fc batch "$site/static.html" "$site/js.html" "$site/missing.html" | grep 'completed, 2 of 3 pages usable$' >/dev/null
+file -b "$(fc shot "$site/js.html")" | grep '^PNG image data' >/dev/null
+if fc page "$site/missing.html" >/dev/null 2>&1; then
+  printf 'fc.sh reported a missing page as usable\n' >&2
+  exit 1
+fi
+printf "Passed the skill's script, with a screenshot and a missing page\n"

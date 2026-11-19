@@ -59,6 +59,8 @@ The first connects your agents to the server through Firecrawl's MCP server, and
 
 To skip the approval prompt each time an agent reads a page, add `--auto-approve --approve-tool firecrawl_scrape --approve-tool firecrawl_map --approve-tool firecrawl_crawl --approve-tool firecrawl_check_crawl_status` to the first command (Claude Code and Codex).
 
+Agents that can reach the network from their shell, such as Claude Code, can also save long pages to a file and read only the part they need. To enable that, set `FIRECRAWL_API_URL` and `FIRECRAWL_API_KEY` in the agent's environment; for Claude Code, in the `env` section of `~/.claude/settings.json`.
+
 Firecrawl's SDKs take the same URL and token, for example `Firecrawl(api_url="http://127.0.0.1:3002", api_key="<token>")` in Python.
 
 ## Use it from other devices

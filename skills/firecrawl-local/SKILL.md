@@ -23,6 +23,19 @@ The server's own instructions describe Firecrawl's cloud service. Locally, use `
 - For a slow page that renders late, add `waitFor` in milliseconds.
 - AI extraction (`json`, `summary` formats) and browser `actions` aren't available locally either.
 
+## Long pages: save to a file
+
+If `FIRECRAWL_API_URL` and `FIRECRAWL_API_KEY` are set in your shell, fetch long pages (full documentation pages, READMEs, long articles) to a file and read only the part you need, instead of loading the whole page into context:
+
+```bash
+curl -sS "$FIRECRAWL_API_URL/v2/scrape" -H "Authorization: Bearer $FIRECRAWL_API_KEY" \
+  -H 'Content-Type: application/json' -d '{"url":"https://example.com/docs","formats":["markdown"]}' \
+  | jq -r '.data.markdown // error(.error // "no markdown")' > /tmp/page.md
+grep -n '^#' /tmp/page.md   # the page's outline with line numbers
+```
+
+Then read just the lines of the section you need. If the variables aren't set or your shell can't reach the network (Codex's sandbox blocks it by default), use the MCP tools.
+
 ## Errors
 
 - `401 UNAUTHORIZED`: the MCP server's `FIRECRAWL_API_KEY` doesn't match the server's token.
